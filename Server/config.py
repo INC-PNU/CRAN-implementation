@@ -20,5 +20,4 @@ def create_parser():
                         default=1000000,
                         help='The sampling rate.')
 
-
     return parser
