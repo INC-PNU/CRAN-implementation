@@ -14,7 +14,7 @@ from utils.my_lora_utils import *
 ############### PARAM INITIALIZATION ##############################
 parser = config.create_parser()
 opts = parser.parse_args()
-opts.sf = 9
+opts.sf = 7
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
@@ -49,10 +49,15 @@ for i, bam in enumerate(multi_bam.bams):
 url = "http://127.0.0.1:5000/upload"
 
 preamble= create_lora_preamble(opts,LoRa)
-sequence = [2,3,4,245]
+print(preamble.shape)
+sequence = [510,3,4,245]
 payload = create_lora_payload(opts,LoRa,sequence)
-complete_signal = np.concatenate([preamble,payload]).astype(np.complex64)
-print(complete_signal)
+
+print(payload.shape)
+complete_signal_ = np.concatenate([preamble,payload]).astype(np.complex64)
+complete_signal = add_cfo(opts,complete_signal_,-2404)
+
+print(complete_signal.shape)
 iq_bytes = complete_signal.tobytes()            # convert to bytes
 iq_b64 = base64.b64encode(iq_bytes).decode()    # encode to Base64, then encode to string
 print(complete_signal.shape)

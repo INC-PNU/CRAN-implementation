@@ -7,7 +7,7 @@ def create_lora_preamble(opts,lora):
 
     # Generate full up and down chirps
     up_chirp = lora_f.gen_symbol_fs(0, down=False, Fs=opts.fs)
-    down_chirp = lora_f.gen_symbol_fs(0, down=True, Fs=opts.fs)
+    down_chirp = np.conjugate(up_chirp)
     sync_symbol = lora_f.gen_symbol_fs(8, down=False, Fs=opts.fs)  # adjust symbol if needed
 
     # Partial down-chirp (¼ of full down-chirp)
@@ -25,9 +25,13 @@ def create_lora_preamble(opts,lora):
 def create_lora_payload(opts,lora,symbol_sequence):
     all_symbols = []
     lora_f = lora(opts.sf, opts.bw)
-
+    window_length = int(opts.n_classes * (opts.fs / opts.bw))
     for symbol in symbol_sequence:
-        sym_wave = lora_f.gen_symbol_fs(symbol, down=False, Fs=opts.fs)
+        if symbol < 0 or symbol > opts.n_classes:
+            sym_wave = np.random.rand(window_length)
+        else:
+            sym_wave = lora_f.gen_symbol_fs(symbol, down=False, Fs=opts.fs)
+        
         all_symbols.append(sym_wave)
 
     # Concatenate into a single waveform
@@ -47,3 +51,13 @@ def Plot_Specgram_iqraw_all(opts,signal):
     plt.ylim(-opts.bw,opts.bw)
     plt.show()
     return 0
+
+
+# Function to add CFO (in Hz)
+def add_cfo(opts, signal, cfo_hz):
+    n = np.arange(len(signal))
+    t = n / opts.fs
+    print(t.shape)
+    print(signal.shape)
+    rot = np.exp(1j * 2 * np.pi * cfo_hz * t).astype(np.complex64)
+    return signal * rot
