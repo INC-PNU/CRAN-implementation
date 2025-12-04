@@ -76,7 +76,7 @@ def round_half_away_from_zero(x):
 ## Deal with CFO, and STO #
 def correction_cfo_sto(opts,LoRa,rx_samples):
     THRESHOLD_FOR_PREAMBLE_DETECTION = 0.625
-    factor = 2
+    factor = 1.5
     samplePerSymbol = opts.n_classes * (opts.fs / opts.bw)
     framePerSymbol = int(samplePerSymbol)
     lora_init = LoRa(opts.sf, opts.bw)
@@ -132,6 +132,7 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
             
             if (len(dechirped_max)) >= 8:
                 mean_val = np.mean(dechirped_max)
+                print(dechirped_max)
                 indices = np.where(dechirped_max > (mean_val * factor))[0] # Find first index where value > mean
                 Local_Index_that_start_a_down_chirp = indices[0] if len(indices) > 0 else None
                 print("INDEX DOWNCHIRP : ")
@@ -148,14 +149,14 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25
     print(global_index_that_start_a_payload)
 
-    fup_chosen = global_index_that_start_a_down_chirp - 5
+    fup_chosen = global_index_that_start_a_down_chirp - 4
     fdown_chosen = global_index_that_start_a_down_chirp 
 
     correction_factor_by_cfo_frac = np.exp(-1j * 2 * np.pi * ( CFO_FRAC)* t)
     
     dechirped_up = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * down_chirp_signal * correction_factor_by_cfo_frac
     dechirped_down = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * up_chirp_signal * correction_factor_by_cfo_frac
-    
+
     psd_up = np.abs(np.fft.fftshift(np.fft.fft(dechirped_up)))
     
     f_up = np.argmax(psd_up)
@@ -174,56 +175,20 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     CFO_FINAL = CFO_INT_HZ - (CFO_FRAC)
     print("OUR CFO ESTIMATION IS : ",CFO_FINAL)
 
-    # CFO = (opts.n_classes //2 ) - CFO
-    print("CFO awal",CFO)
-    CFO = (framePerSymbol //2 ) - CFO
-    print("CFO Befor : ",CFO)
-    CFO = round_half_away_from_zero(CFO)
-   
-    
-    
-   
-    # ### TEST TYPE 2
-    # test1 = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] *  np.conj(np.exp(-1j * 2 * np.pi * CFO* t)) 
-    # test2 = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] *  np.exp(-1j * 2 * np.pi * CFO* t) 
-    # corr = correlate(test1, up_chirp_signal, mode="full", method="fft")
-    # corr2 = correlate(test2, up_chirp_signal, mode="full", method="fft")
-    
-    # corr_magnitude = np.abs(corr)**2    
-    # corr_magnitude2 = np.abs(corr2)**2
-    
-    # max_corr = np.max(corr_magnitude)
-    # mean_corr = np.mean(corr_magnitude)
-    # max_corr2 = np.max(corr_magnitude2)
-    # mean_corr2 = np.mean(corr_magnitude2)
-    
-    dechirped_1 = rx_samples[(fup_chosen-1)*framePerSymbol:(fup_chosen-1)*framePerSymbol + framePerSymbol] * down_chirp_signal
-    dechirped_2 = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * down_chirp_signal
-    phase_diff = np.angle(np.vdot(dechirped_1, dechirped_2))
-    print("PHASE :   ", phase_diff)
-   
-    # phase_diff = np.abs(phase_diff) - math.floor(np.abs(phase_diff))
-    print("Phase diff",phase_diff)
-    # CFO_FRAC = (phase_diff * opts.bw) / opts.n_classes
-    CFO_FRAC = (phase_diff / (2*np.pi)) * opts.bw / opts.n_classes
-    # CFO_FRAC = (phase_diff / (2*np.pi)) * opts.bw / samplePerSymbol 
-    print(CFO_FRAC)
-    CFO_FINAL = CFO_INT_HZ - (CFO_FRAC)
-    print("OUR CFO ESTIMATION IS : ",CFO_FINAL)
-    rx_samples_corrected_cfo =  rx_samples[(fup_chosen-1)*framePerSymbol:(fup_chosen-1)*framePerSymbol + framePerSymbol]* correction_factor
+    correction_factor_by_cfo_total = np.exp(1j * 2 * np.pi * (int(CFO_FINAL))* t)
+    rx_samples_corrected_cfo =  rx_samples[(fup_chosen-1)*framePerSymbol:(fup_chosen-1)*framePerSymbol + framePerSymbol] 
 
     corr = correlate(rx_samples_corrected_cfo, up_chirp_signal, mode="full", method="fft")
     peak_index = np.argmax(np.abs(corr))
     # STO_Correction = peak_index % oneSymbol
-    peak_index = peak_index % framePerSymbol
+    peak_index = peak_index
     print("Please adjust the window :",peak_index)
-    a = len(rx_samples)
-    b = len(correction_factor)
+    
     # correction_factor_10 = np.tile(correction_factor, int(a/b))
     
     # b = len(correction_factor_10)
     # rx_samples_corrected_sto_corrected_cfo = (rx_samples * correction_factor_10)[peak_index:]
-    return Index_that_start_a_down_chirp,CFO_FINAL,correction_factor
+    return global_index_that_start_a_payload,CFO_FINAL,correction_factor_by_cfo_total
 
 ## BACK UP VERSI 1 ##
 ## Jika tanpa STO, sudah berhasil sempurna ##

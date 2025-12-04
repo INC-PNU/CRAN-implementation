@@ -19,11 +19,11 @@ def upload():
     ######################## TES ESTIMATE SYMBOL #############################
 
     ######################## TES SENSING PREAMBLE #############################
-    index_down,corrrection,c10 = correction_cfo_sto(opts,LoRa,np_lora_signal)
+    index_payload,cfo ,a= correction_cfo_sto(opts,LoRa,np_lora_signal)
     
     # index_down,corrrection,c10 = correction_cfo_sto_Can_be_delete_soon(opts,LoRa,np_lora_signal)
-    print(index_down)
-    print(corrrection)
+    print(index_payload)
+    print(cfo)
     
     ########################  TES SENSING PREAMBLE #############################
 
