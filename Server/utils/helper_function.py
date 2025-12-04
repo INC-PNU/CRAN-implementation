@@ -2,12 +2,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import base64
+import math
 from scipy.signal import correlate
 def read_base64_convert_to_np(data):
-    iq_bytes = base64.b64decode(data)
-    
+    iq_bytes = base64.b64decode(data) 
     iq_data = np.frombuffer(iq_bytes, dtype=np.complex64)
-    print("IQ shape:", iq_data.shape)
     return iq_data
 
 def Plot_Specgram_iqraw_all(opts,lora,signal):
@@ -66,6 +65,12 @@ def estimate_symbol(opts,lora,signal):
     
     return symbol,max_index
 
+def round_half_away_from_zero(x):
+    if x > 0:
+        return math.floor(x + 0.5)
+    else:
+        return math.ceil(x - 0.5)
+    
 def correction_cfo_sto(opts,LoRa,rx_samples):
     samplePerSymbol = opts.n_classes * (opts.fs / opts.bw)
     framePerSymbol = int(samplePerSymbol)
@@ -93,23 +98,38 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
         ### DECHIRPED WITH DOWN CHIRP
         dechirp_up = frameBuffer * down_chirp_signal
         psd = np.fft.fftshift(np.fft.fft(dechirp_up))
+        psd = np.abs(psd)
+        # power = np.abs(spectrum) ** 2
+        # max_index = np.argmax(power)
+        
+        # # Step 4: Extract only the middle 512 bins (LoRa bandwidth region)
+        # fft_len = len(power)
+        # center = fft_len // 2
+    
+        # bins = 2 ** opts.sf  # 512 bins
+        # upper_freq = power[center : center + bins]
+        # lower_freq = power[center - bins: center]
+        # combine = upper_freq + lower_freq
+        # # Step 5: Find peak (max bin)
+        # symbol = np.argmax(combine)
+    
         maxindex = np.argmax(psd)
         real_fup = (maxindex/framePerSymbol) * opts.n_classes
-        fup.append(maxindex)
+        fup.append(real_fup)
         ### DECHIRPED WITH DOWN CHIRP
 
         ### DECHIRPED WITH UP CHIRP    
         dechirp_down = frameBuffer * up_chirp_signal
         psd = np.fft.fftshift(np.fft.fft(dechirp_down))
+        psd = np.abs(psd)
         maxindex = np.argmax(psd)   
         real_fdown = (maxindex/framePerSymbol) * opts.n_classes
-        fdown.append(maxindex)
+        fdown.append(real_fdown)
         ### DECHIRPED WITH UP CHIRP  
 
         ### FIND the maximum amplitude of dechirping with up chirp  
         maxAmplitude = np.max(np.abs(np.fft.fft(dechirp_down)))
         dechirped_max.append(maxAmplitude)
-        print(i)
         i = i + 1
 
     # Compute mean , 
@@ -121,21 +141,22 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     #### Then we will find 2 up chirp and 2 down chirp
     fup_chosen = Index_that_start_a_down_chirp - 4
     fdown_chosen = Index_that_start_a_down_chirp + 1
-    print(fup_chosen)
-    print(fdown_chosen)
+    
     print(fup)
     print(fdown)
     CFO = (fup[fup_chosen] + fdown[fdown_chosen] )/2
-    print(framePerSymbol)
-    CFO = (framePerSymbol//2) - CFO
-    print("SEAn")
-    print(fup[fup_chosen])
     print(CFO)
-    CFO_hz = (CFO / opts.n_classes) * opts.bw
-    print(CFO_hz)
-    # correction_factor = np.exp(-1j * 2 * np.pi * CFO* t)
-    CFO = CFO % (opts.bw/2)
-    print("CFO",CFO)
+    print("as")
+    # CFO = (framePerSymbol//2) - CFO
+    CFO = (opts.n_classes //2 ) - CFO
+    
+    print("CFO Befor : ",CFO)
+    print("CFO KIRAKIRA : ",CFO)
+    CFO_HZ = CFO / opts.n_classes * opts.fs
+    print("CFO HZ KIRAKIRA : ",CFO_HZ)
+    
+    correction_factor = np.exp(-1j * 2 * np.pi * CFO* t)
+   
     ### TEST TYPE 2
     test1 = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] *  np.conj(np.exp(-1j * 2 * np.pi * CFO* t)) 
     test2 = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] *  np.exp(-1j * 2 * np.pi * CFO* t) 
@@ -150,31 +171,20 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     max_corr2 = np.max(corr_magnitude2)
     mean_corr2 = np.mean(corr_magnitude2)
     
-    dechirped_1 = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * up_chirp_signal
-    dechirped_2 = rx_samples[(fup_chosen+1)*framePerSymbol:(fup_chosen+1)*framePerSymbol + framePerSymbol] * up_chirp_signal
-    phase_diff = np.angle(np.vdot(dechirped_2, dechirped_1))
-    
-    print(CFO)
-    if (mean_corr2  >= mean_corr): # test 1 lebih berkolerasi , pilih test1
-        CFO_FINAL = CFO   
-        print("Turunin sinyal")  
-        correction_factor = np.exp(-1j * 2 * np.pi * CFO_FINAL* t)
-    else :
-        CFO_FINAL = opts.bw/2 - CFO
-        print(CFO_FINAL)
-        print("Naikin sinyal")
-        correction_factor = np.conj(np.exp(-1j * 2 * np.pi * CFO_FINAL* t))
-    
-    print("OUR CFO ESTIMATION IS : ",CFO_FINAL)
-    if (np.abs(CFO_FINAL - opts.bw/2) < 1000): #its weird
-        CFO_FINAL = opts.bw/2 - CFO_FINAL
-        print("OUR CFO get edited IS : ",CFO_FINAL)
-        if (max_corr > max_corr2):
-            print("Naikin sinyal ke 2")
-            correction_factor = np.conj(np.exp(-1j * 2 * np.pi * CFO_FINAL* t))
-        else:
-            print("Turunin sinyal ke 2")
-            correction_factor = np.exp(-1j * 2 * np.pi * CFO_FINAL* t)
+    dechirped_1 = rx_samples[(fup_chosen-1)*framePerSymbol:(fup_chosen-1)*framePerSymbol + framePerSymbol] * down_chirp_signal
+    dechirped_2 = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * down_chirp_signal
+    phase_diff = np.angle(np.vdot(dechirped_1, dechirped_2))
+    print("PHASE :   ", phase_diff)
+    if (phase_diff < 0):
+        mult = -1
+    else:
+        mult = 1
+    # phase_diff = np.abs(phase_diff) - math.floor(np.abs(phase_diff))
+    print("Phase diff",phase_diff)
+    # CFO_FRAC = (phase_diff * opts.bw) / opts.n_classes
+    CFO_FRAC = (phase_diff / (2*np.pi)) * opts.bw / opts.n_classes
+    print(CFO_FRAC)
+    print("OUR CFO ESTIMATION IS : ",CFO_HZ - (CFO_FRAC))
     
     rx_samples_corrected_cfo =  rx_samples[(fup_chosen-1)*framePerSymbol:(fup_chosen-1)*framePerSymbol + framePerSymbol]* correction_factor
 
@@ -189,4 +199,4 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     
     # b = len(correction_factor_10)
     # rx_samples_corrected_sto_corrected_cfo = (rx_samples * correction_factor_10)[peak_index:]
-    return Index_that_start_a_down_chirp,CFO_FINAL,correction_factor
+    return Index_that_start_a_down_chirp,CFO,correction_factor

@@ -22,7 +22,7 @@ def upload():
     index_down,corrrection,c10 = correction_cfo_sto(opts,LoRa,np_lora_signal)
     print(index_down)
     print(corrrection)
-    print(c10)
+    
     ########################  TES SENSING PREAMBLE #############################
 
 
@@ -32,7 +32,7 @@ def upload():
 if __name__ == '__main__':
     parser = config.create_parser()
     opts = parser.parse_args()
-    opts.sf = 7
+    opts.sf = 8
     opts.bw = 125_000
     opts.fs = 1_000_000
     opts.n_classes = 2 ** opts.sf
