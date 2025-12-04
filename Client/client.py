@@ -62,7 +62,7 @@ complete_signal_cfo = add_cfo(opts,complete_signal_,CFO)
 number_of_frame_per_symbol = opts.n_classes * (opts.fs / opts.bw)
 symbol_offset = int(number_of_frame_per_symbol // 2)
 print("Use Symbol offset : ",symbol_offset)
-complete_signal_cfo_sto = complete_signal_cfo[46:]
+complete_signal_cfo_sto = complete_signal_cfo[42:]
 
 # complete_signal_cfo_sto = complete_signal_cfo
 print("CFO use : ",CFO)
