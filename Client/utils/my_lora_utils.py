@@ -57,7 +57,5 @@ def Plot_Specgram_iqraw_all(opts,signal):
 def add_cfo(opts, signal, cfo_hz):
     n = np.arange(len(signal))
     t = n / opts.fs
-    print(n)
-    print("signal shape",signal.shape)
-    rot = np.exp(1j * 2 * np.pi * cfo_hz * t).astype(np.complex64)
+    rot = np.exp(1j * 2 * np.pi * cfo_hz * t).astype(signal.dtype)
     return signal * rot

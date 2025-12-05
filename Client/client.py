@@ -14,12 +14,12 @@ from utils.my_lora_utils import *
 ############### PARAM INITIALIZATION ##############################
 parser = config.create_parser()
 opts = parser.parse_args()
-opts.sf = 7
+opts.sf = 10
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-CFO = 0
-
+CFO = -1100 #1600 broken
+numb_offset = 508
 print("Lora SF : ",opts.sf)
 print("Lora BW : ",opts.bw)
 print("Lora FS : ",opts.fs)
@@ -61,11 +61,12 @@ complete_signal_ = np.concatenate([random_ZONK,preamble,payload]).astype(np.comp
 complete_signal_cfo = add_cfo(opts,complete_signal_,CFO)
 number_of_frame_per_symbol = opts.n_classes * (opts.fs / opts.bw)
 symbol_offset = int(number_of_frame_per_symbol // 2)
-print("Use Symbol offset : ",symbol_offset)
-complete_signal_cfo_sto = complete_signal_cfo[0:]
+
+complete_signal_cfo_sto = complete_signal_cfo[numb_offset:]
 
 # complete_signal_cfo_sto = complete_signal_cfo
 print("CFO use : ",CFO)
+print("Sampling Offset use : ",numb_offset)
 print(complete_signal_cfo_sto.shape)
 iq_bytes = complete_signal_cfo_sto.tobytes()            # convert to bytes
 iq_b64 = base64.b64encode(iq_bytes).decode()    # encode to Base64, then encode to string
