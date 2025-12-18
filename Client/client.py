@@ -11,20 +11,8 @@ from models.example_BAM_model.BAM import MultiBAMv3
 from utils.LoRa import LoRa
 from utils.my_lora_utils import *
 
-############### PARAM INITIALIZATION ##############################
 parser = config.create_parser()
 opts = parser.parse_args()
-opts.sf = 10
-opts.bw = 125_000
-opts.fs = 1_000_000
-opts.n_classes = 2 ** opts.sf
-CFO = -1100 #1600 broken
-numb_offset = 508
-print("Lora SF : ",opts.sf)
-print("Lora BW : ",opts.bw)
-print("Lora FS : ",opts.fs)
-gateway_id = 1
-############### PARAM INITIALIZATION ##############################
 
 ####################### Testing Load BAM Model #######################
 model_dir_path = os.path.join(cwd, "models", "example_BAM_model")
@@ -45,38 +33,62 @@ for i, bam in enumerate(multi_bam.bams):
 ####################### Testing Load BAM Model #######################
 
 
-###################### SEND REQUEST TO SERVER ##############################
+###################### Make some definition REQUEST TO SERVER ##############################
 url = "http://127.0.0.1:5000/upload"
 
-preamble= create_lora_preamble(opts,LoRa)
-print(preamble.shape)
-sequence = [14,3,4,23,55,44,33,22,11]
-payload = create_lora_payload(opts,LoRa,sequence)
+def send_lora_to_server(opts):
 
-sequence_ = [999,454]
-random_ZONK = create_lora_payload(opts,LoRa,sequence_)
+    preamble= create_lora_preamble(opts,LoRa)
+    print(preamble.shape)
+    sequence = [14,3,4,23,55,44,33,22,11]
+    payload = create_lora_payload(opts,LoRa,sequence)
 
-print(payload.shape)
-complete_signal_ = np.concatenate([random_ZONK,preamble,payload]).astype(np.complex64)
-complete_signal_cfo = add_cfo(opts,complete_signal_,CFO)
-number_of_frame_per_symbol = opts.n_classes * (opts.fs / opts.bw)
-symbol_offset = int(number_of_frame_per_symbol // 2)
+    sequence_ = [999,454]
+    random_ZONK = create_lora_payload(opts,LoRa,sequence_)
 
-complete_signal_cfo_sto = complete_signal_cfo[numb_offset:]
+    print(payload.shape)
+    complete_signal_ = np.concatenate([random_ZONK,preamble,payload]).astype(np.complex64)
+    complete_signal_cfo = add_cfo(opts,complete_signal_,opts.CFO)
 
-# complete_signal_cfo_sto = complete_signal_cfo
-print("CFO use : ",CFO)
-print("Sampling Offset use : ",numb_offset)
-print(complete_signal_cfo_sto.shape)
-iq_bytes = complete_signal_cfo_sto.tobytes()            # convert to bytes
-iq_b64 = base64.b64encode(iq_bytes).decode()    # encode to Base64, then encode to string
-print(complete_signal_cfo_sto.shape)
-payload = {
-    "gateway_id": "GW01",
-    "value": "Hello from GW01",
-    "iq_data": iq_b64
-}
+    complete_signal_cfo_sto = complete_signal_cfo[opts.numb_offset:]
 
-response = requests.post(url, json=payload)
+    # complete_signal_cfo_sto = complete_signal_cfo
+    print("CFO use : ",opts.CFO)
+    print("Sampling Offset use : ",opts.numb_offset)
+    print(complete_signal_cfo_sto.shape)
+    iq_bytes = complete_signal_cfo_sto.tobytes()            # convert to bytes
+    iq_b64 = base64.b64encode(iq_bytes).decode()    # encode to Base64, then encode to string
+    print(complete_signal_cfo_sto.shape)
+    payload = {
+        "gateway_id": f'GW{opts.gateway_id}',
+        "value": f"Hello from GW{opts.gateway_id}",
+        "iq_data": iq_b64,
+        "bw" : opts.bw,  # Default value if not provided
+        "sf" : opts.sf,      # Default value if not provided
+        "fs" : opts.fs
+    }
 
-###################### SEND REQUEST TO SERVER ##############################
+    response = requests.post(url, json=payload)
+    return response
+
+############### PARAM INITIALIZATION THEN SEND REQUEST TO SERVER ##############################
+opts.sf = 10
+opts.bw = 125_000
+opts.fs = 1_000_000
+opts.n_classes = 2 ** opts.sf
+opts.CFO = -1100 
+opts.numb_offset = 508
+opts.gateway_id = 1
+
+send_lora_to_server(opts)
+############### PARAM INITIALIZATION THEN SEND ##############################
+
+opts.sf = 8
+opts.bw = 125_000
+opts.fs = 1_000_000
+opts.n_classes = 2 ** opts.sf
+opts.CFO = 0
+opts.numb_offset = 0
+opts.gateway_id = 2
+
+send_lora_to_server(opts)

@@ -130,14 +130,14 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
             
             if (len(dechirped_max)) >= 8:
                 mean_val = np.mean(dechirped_max)  
-                print(dechirped_max)         
+                # print(dechirped_max)         
                 indices = np.where(dechirped_max > (mean_val * factor))[0] # Find first index where value > mean*factor
                 Local_Index_that_start_a_down_chirp = indices[0] if len(indices) > 0 else None
 
                 if (dechirped_max[Local_Index_that_start_a_down_chirp] < dechirped_max[Local_Index_that_start_a_down_chirp + 1]):
                     Local_Index_that_start_a_down_chirp += 1  #Choose second downchirp, might have better signal
-                    print("masuk ke sini tambah 1")
-                print(Local_Index_that_start_a_down_chirp)
+                    
+                # print(Local_Index_that_start_a_down_chirp)
                 global_index_that_start_a_down_chirp = preamble_found_index + Local_Index_that_start_a_down_chirp
                 keep_going = False
             #### Then we will find 2 up chirp and 2 down chirp
@@ -167,7 +167,7 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     combine = upper_freq + lower_freq
     # Step 5: Find peak (max bin)
     symbol_up = np.argmax(combine)
-    print("SYMBOL-TESTING",symbol_up)
+    # print("SYMBOL-TESTING",symbol_up)
 
     psd_down = np.abs(np.fft.fftshift(np.fft.fft(dechirped_down)))
 
@@ -179,21 +179,16 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     combine = upper_freq + lower_freq
     # Step 5: Find peak (max bin)
     symbol_down = np.argmax(combine)
-    print("SYMBOL-TESTING-down",symbol_down)
+    # print("SYMBOL-TESTING-down",symbol_down)
   
-    CFO = (symbol_up + symbol_down)/2
-    print(CFO)
+    CFO = (symbol_up + symbol_down)/2  
     CFO = to_nearest_N_center(CFO,opts.n_classes) ## Only can recover a CFO limited to the range [􀀀BW=4;BW=4].
-    print(CFO)
     CFO = round_half_away_from_zero(CFO) # If positif, round to upper, if negative round to lower
-    print(CFO)
     CFO_INT_HZ = (CFO / opts.n_classes) * opts.bw
 
-    print("-----------Under Test----------------")
+    print(f"-----------Under Test RESULT {opts.gateway_id}----------------")
     print("CFO HZ INT: ",CFO_INT_HZ)
     print("CFO HZ FRAC: ",CFO_FRAC)
-    print(">>>>>>> vVVVVVVVVVVVVVVVVVV")
-
     CFO_FINAL = CFO_INT_HZ + CFO_FRAC
     print("OUR CFO ESTIMATION IS : ",CFO_FINAL)
 
