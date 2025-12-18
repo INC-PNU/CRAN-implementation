@@ -22,7 +22,7 @@ def upload():
     
     # Convert base64 IQ data to numpy array
     np_lora_signal = read_base64_convert_to_np(b64_lora_signal)
-
+    print(np_lora_signal[0])
     # Set the opts for this request
     opts = type('', (), {})()  # Create an empty object for opts
     opts.sf = sf
@@ -32,7 +32,15 @@ def upload():
     opts.gateway_id = gateway_id
 
     ######################## TES SENSING PREAMBLE #############################
-    index_payload, cfo, a = correction_cfo_sto(opts, LoRa, np_lora_signal)
+    index_payload, cfo, sto, correction_euler = correction_cfo_sto(opts, LoRa, np_lora_signal)
+    framePerSymbol = int(opts.n_classes * (opts.fs / opts.bw))
+    print((index_payload) * framePerSymbol)
+    payload = np_lora_signal[int(index_payload * framePerSymbol) + (int(sto)):]
+    Plot_Specgram_iqraw_all(opts,payload)
+    print(index_payload)
+    print(cfo)
+    print(sto)
+    
 
     return jsonify({"status": "success"}), 200
 
@@ -43,4 +51,4 @@ if __name__ == '__main__':
     # opts.bw = 125_000
     # opts.fs = 1_000_000
     # opts.n_classes = 2 ** opts.sf
-    app.run(host='0.0.0.0', port=5000, debug=False) 
+    app.run(host='0.0.0.0', port=5000, debug=True) 

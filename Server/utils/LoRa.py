@@ -25,8 +25,8 @@ class LoRa:
             np.random.normal(0, np.sqrt(noise_avg_pwr/2), len(signal_)) +
             1j * np.random.normal(0, np.sqrt(noise_avg_pwr/2), len(signal_))
         )
-
-        return signal_ + noise_sim
+        noisy_signal = signal_ + noise_sim
+        return noisy_signal.astype(np.complex64)
     
     def calculate_snr_db(self, clean_signal, noisy_signal):
         signal_power = np.mean(np.abs(clean_signal)**2)

@@ -97,6 +97,8 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     Current_symbol = [-1,-2,-3,-4,-5,-6,-7,-8]
     keep_going = True
     preamble_found = False
+
+    helper_index = 0
     
     while (total_buffer < len(rx_samples) and keep_going):
         frameBuffer = rx_samples[total_buffer:(total_buffer + framePerSymbol)]
@@ -136,7 +138,8 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
 
                 if (dechirped_max[Local_Index_that_start_a_down_chirp] < dechirped_max[Local_Index_that_start_a_down_chirp + 1]):
                     Local_Index_that_start_a_down_chirp += 1  #Choose second downchirp, might have better signal
-                    
+                    print("MASUK KAH ??")
+                    helper_index = 0
                 # print(Local_Index_that_start_a_down_chirp)
                 global_index_that_start_a_down_chirp = preamble_found_index + Local_Index_that_start_a_down_chirp
                 keep_going = False
@@ -146,7 +149,7 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
          
         i = i + 1
  
-    global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25
+    global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25 + helper_index
 
     fup_chosen = global_index_that_start_a_down_chirp - 5 # -5 is fix and safe
     fdown_chosen = global_index_that_start_a_down_chirp  #
@@ -201,8 +204,10 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     lag_samples = peak_index - (samplePerSymbol - 1)  # 0 means perfectly aligned
     print("Lag in samples:", lag_samples)
     print("Please adjust the window :",lag_samples)
+
+    print(global_index_that_start_a_down_chirp)
     
-    return global_index_that_start_a_payload,CFO_FINAL,correction_factor_by_cfo_total
+    return global_index_that_start_a_payload,CFO_FINAL,lag_samples,correction_factor_by_cfo_total
 
 
 # ## Versi 2 ##

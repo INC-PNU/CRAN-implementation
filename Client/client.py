@@ -36,11 +36,11 @@ for i, bam in enumerate(multi_bam.bams):
 ###################### Make some definition REQUEST TO SERVER ##############################
 url = "http://127.0.0.1:5000/upload"
 
-def send_lora_to_server(opts):
+def send_lora_to_server(opts,noise_seed):
 
     preamble= create_lora_preamble(opts,LoRa)
     print(preamble.shape)
-    sequence = [14,3,4,23,55,44,33,22,11]
+    sequence = [206,3,4,23,55,44,33,22,11]
     payload = create_lora_payload(opts,LoRa,sequence)
 
     sequence_ = [999,454]
@@ -51,7 +51,14 @@ def send_lora_to_server(opts):
     complete_signal_cfo = add_cfo(opts,complete_signal_,opts.CFO)
 
     complete_signal_cfo_sto = complete_signal_cfo[opts.numb_offset:]
-
+    print(type(complete_signal_cfo_sto))
+    print(complete_signal_cfo_sto.dtype) 
+    if (noise_seed >= 0):
+        Lora_function_init = LoRa(opts.sf, opts.bw)
+        complete_signal_cfo_sto = Lora_function_init.awgn_iq_with_seed(complete_signal_cfo_sto, opts.snr, seed=noise_seed)
+    print(complete_signal_cfo_sto.dtype) 
+    print(type(complete_signal_cfo_sto))
+    print("sean")
     # complete_signal_cfo_sto = complete_signal_cfo
     print("CFO use : ",opts.CFO)
     print("Sampling Offset use : ",opts.numb_offset)
@@ -72,23 +79,24 @@ def send_lora_to_server(opts):
     return response
 
 ############### PARAM INITIALIZATION THEN SEND REQUEST TO SERVER ##############################
-opts.sf = 10
-opts.bw = 125_000
-opts.fs = 1_000_000
-opts.n_classes = 2 ** opts.sf
-opts.CFO = -1100 
-opts.numb_offset = 508
-opts.gateway_id = 1
-
-send_lora_to_server(opts)
+# opts.sf = 9
+# opts.bw = 125_000
+# opts.fs = 1_000_000
+# opts.n_classes = 2 ** opts.sf
+# opts.CFO = -1100 
+# opts.numb_offset = 508
+# opts.gateway_id = 1
+# opts.snr = 0
+# send_lora_to_server(opts,-1)
 ############### PARAM INITIALIZATION THEN SEND ##############################
 
-opts.sf = 8
+opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = 0
-opts.numb_offset = 0
+opts.CFO = 5600
+opts.numb_offset = 2000
 opts.gateway_id = 2
+opts.snr = 10
 
-send_lora_to_server(opts)
+send_lora_to_server(opts,2)
