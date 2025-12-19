@@ -149,8 +149,8 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
   
     correction_factor_by_cfo_frac = np.exp(-1j * 2 * np.pi * (CFO_FRAC)* t)
     
-    dechirped_up = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac*down_chirp_signal 
-    dechirped_down = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac*up_chirp_signal
+    dechirped_up = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac * down_chirp_signal 
+    dechirped_down = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac * up_chirp_signal
 
     #########################################################
     psd_up = np.abs(np.fft.fftshift(np.fft.fft(dechirped_up)))  
@@ -159,12 +159,49 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     center = fft_len // 2
     bins = opts.n_classes
     upper_freq = psd_up[center : center + bins ]
+    print(np.argmax(upper_freq))
+    print(upper_freq[np.argmax(upper_freq) -2])
+    print(upper_freq[np.argmax(upper_freq) -1])
+    print(upper_freq[np.argmax(upper_freq) ])
+    print(upper_freq[np.argmax(upper_freq) +1])
+    print(upper_freq[np.argmax(upper_freq) +2])
     lower_freq = psd_up[center - bins: center]
+    print(np.argmax(lower_freq))
+    print(lower_freq[np.argmax(lower_freq) -2])
+    print(lower_freq[np.argmax(lower_freq) -1])
+    print(lower_freq[np.argmax(lower_freq) ])
+    print(lower_freq[np.argmax(lower_freq) +1])
+    print(lower_freq[np.argmax(lower_freq) +2])
     combine = upper_freq + lower_freq
+
+    
+    print(combine[np.argmax(combine) -2])
+    print(combine[np.argmax(combine) -1])
+    print(combine[np.argmax(combine) ])
+    print(combine[np.argmax(combine) +1])
+    print(combine[np.argmax(combine) +2])
     # Step 5: Find peak (max bin)
     symbol_up = np.argmax(combine)
-    # print("SYMBOL-TESTING",symbol_up)
+    print("SYMBOL-TESTING",symbol_up)
 
+############ TESTES DELETE SOON
+    n = len(dechirped_up)  # Length of the signal
+    fft_signal = np.fft.fft(dechirped_up)
+    fft_signal = np.fft.fftshift(fft_signal)  # Shift zero frequency to center
+    T = 1.0 / opts.fs # Sampling period
+    # Generate corresponding frequency axis
+    frequencies = np.fft.fftfreq(n, T)  # Frequency axis
+    frequencies = np.fft.fftshift(frequencies)  # Shift frequency axis
+
+    # Plot the FFT result (magnitude of the FFT)
+    plt.figure(figsize=(10, 6))
+    plt.plot(frequencies, np.abs(fft_signal))  # Plot magnitude of FFT
+    plt.title('FFT of the Signal')
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Magnitude')
+    plt.grid(True)
+    # plt.show()
+############ TESTES DELETE SOON
     psd_down = np.abs(np.fft.fftshift(np.fft.fft(dechirped_down)))
 
     fft_len = len(psd_down)
@@ -175,7 +212,7 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     combine = upper_freq + lower_freq
     # Step 5: Find peak (max bin)
     symbol_down = np.argmax(combine)
-    # print("SYMBOL-TESTING-down",symbol_down)
+    print("SYMBOL-TESTING-down",symbol_down)
   
     CFO = (symbol_up + symbol_down)/2  
     print(CFO)

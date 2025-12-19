@@ -47,4 +47,4 @@ if __name__ == '__main__':
     # opts.bw = 125_000
     # opts.fs = 1_000_000
     # opts.n_classes = 2 ** opts.sf
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=False) 

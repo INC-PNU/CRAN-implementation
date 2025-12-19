@@ -82,22 +82,22 @@ opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = -1302
+opts.CFO = 1055
 opts.numb_offset = 508
 opts.gateway_id = 1
-opts.snr = 40
-send_lora_to_server(opts,-1)
+opts.snr = 12
+send_lora_to_server(opts,1)
 ############### PARAM INITIALIZATION THEN SEND ##############################
 
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = -1399
-opts.numb_offset = 510
-opts.gateway_id = 1
-opts.snr = 40
-send_lora_to_server(opts,-1)
+opts.CFO = 1056
+opts.numb_offset = 508
+opts.gateway_id = 2
+opts.snr = 12
+send_lora_to_server(opts,1)
 
 ############### FAIL ##############################
 # opts.sf = 9
