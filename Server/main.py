@@ -13,7 +13,7 @@ def upload():
     bw = data.get("bw", 125_000)  # Default value if not provided
     sf = data.get("sf", 9)       # Default value if not provided
     fs = data.get("fs", 1_000_000)  # Default value if not provided
-    
+    sync_sym = data.get("sync",8)
     # Print gateway_id for debugging
     print("\nReceived from:", gateway_id)
     print("Received BW:", bw)
@@ -22,26 +22,22 @@ def upload():
     
     # Convert base64 IQ data to numpy array
     np_lora_signal = read_base64_convert_to_np(b64_lora_signal)
-    print(np_lora_signal[0])
+   
     # Set the opts for this request
     opts = type('', (), {})()  # Create an empty object for opts
     opts.sf = sf
     opts.bw = bw
     opts.fs = fs
     opts.n_classes = 2 ** opts.sf
+    opts.sync_sym = sync_sym
     opts.gateway_id = gateway_id
 
     ######################## TES SENSING PREAMBLE #############################
     index_payload, cfo, sto, correction_euler = correction_cfo_sto(opts, LoRa, np_lora_signal)
+    print("index payload", index_payload)
     framePerSymbol = int(opts.n_classes * (opts.fs / opts.bw))
-    print((index_payload) * framePerSymbol)
-    payload = np_lora_signal[int(index_payload * framePerSymbol) + (int(sto)):]
-    Plot_Specgram_iqraw_all(opts,payload)
-    print(index_payload)
-    print(cfo)
-    print(sto)
+    payload = np_lora_signal[int(index_payload * framePerSymbol) + (int(sto)):] 
     
-
     return jsonify({"status": "success"}), 200
 
 if __name__ == '__main__':

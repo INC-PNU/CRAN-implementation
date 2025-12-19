@@ -70,7 +70,7 @@ def round_half_away_from_zero(x):
     if x > 0:
         return math.floor(x + 0.5)
     else:
-        return math.ceil(x)
+        return math.floor(x) ##EXPERIMENTAL from math.ceil
     
 def to_nearest_N_center(x,n_classes):
     return x - (n_classes//2) * round(x / (n_classes//2))
@@ -97,8 +97,6 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     Current_symbol = [-1,-2,-3,-4,-5,-6,-7,-8]
     keep_going = True
     preamble_found = False
-
-    helper_index = 0
     
     while (total_buffer < len(rx_samples) and keep_going):
         frameBuffer = rx_samples[total_buffer:(total_buffer + framePerSymbol)]
@@ -130,26 +128,21 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
             maxAmplitude = np.max(np.abs(np.fft.fft(dechirp_down)))
             dechirped_max.append(maxAmplitude)
             
-            if (len(dechirped_max)) >= 8:
-                mean_val = np.mean(dechirped_max)  
-                # print(dechirped_max)         
+            if (len(dechirped_max)) >= 8:          
+                mean_val = np.mean(dechirped_max)        
                 indices = np.where(dechirped_max > (mean_val * factor))[0] # Find first index where value > mean*factor
                 Local_Index_that_start_a_down_chirp = indices[0] if len(indices) > 0 else None
 
                 if (dechirped_max[Local_Index_that_start_a_down_chirp] < dechirped_max[Local_Index_that_start_a_down_chirp + 1]):
                     Local_Index_that_start_a_down_chirp += 1  #Choose second downchirp, might have better signal
                     print("MASUK KAH ??")
-                    helper_index = 0
                 # print(Local_Index_that_start_a_down_chirp)
                 global_index_that_start_a_down_chirp = preamble_found_index + Local_Index_that_start_a_down_chirp
                 keep_going = False
-            #### Then we will find 2 up chirp and 2 down chirp
-            # fup_chosen = Index_that_start_a_down_chirp - 4
-            # fdown_chosen = Index_that_start_a_down_chirp + 1
-         
+              
         i = i + 1
- 
-    global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25 + helper_index
+
+    global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25
 
     fup_chosen = global_index_that_start_a_down_chirp - 5 # -5 is fix and safe
     fdown_chosen = global_index_that_start_a_down_chirp  #
@@ -185,8 +178,11 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     # print("SYMBOL-TESTING-down",symbol_down)
   
     CFO = (symbol_up + symbol_down)/2  
+    print(CFO)
     CFO = to_nearest_N_center(CFO,opts.n_classes) ## Only can recover a CFO limited to the range [􀀀BW=4;BW=4].
+    print(CFO)
     CFO = round_half_away_from_zero(CFO) # If positif, round to upper, if negative round to lower
+    print(CFO)
     CFO_INT_HZ = (CFO / opts.n_classes) * opts.bw
 
     print(f"-----------Under Test RESULT {opts.gateway_id}----------------")
@@ -205,7 +201,37 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     print("Lag in samples:", lag_samples)
     print("Please adjust the window :",lag_samples)
 
-    print(global_index_that_start_a_down_chirp)
+    ################## ONE MORE MODULE PLEASE #############################
+    # Find the exact index that match the Sync Symbol
+    # That index will be reference index to know when to start a payload
+    i_down = int(global_index_that_start_a_down_chirp) - 1
+    i_down_2 = i_down - 1
+    sto = int(lag_samples)
+    dechirped_sync_1 = rx_samples[(i_down)*framePerSymbol + sto:(i_down)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total * down_chirp_signal
+    dechirped_sync_2 = rx_samples[(i_down_2)*framePerSymbol + sto:(i_down_2)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total * down_chirp_signal
+    
+    psd_sync_1 = np.abs(np.fft.fftshift(np.fft.fft(dechirped_sync_1)))
+    psd_sync_2 = np.abs(np.fft.fftshift(np.fft.fft(dechirped_sync_2)))  
+    
+    fft_len = len(psd_sync_1)
+    center = fft_len // 2
+    bins = opts.n_classes
+    upper_freq_1 = psd_sync_1[center : center + bins ]
+    lower_freq_1 = psd_sync_1[center - bins: center]
+    combine_1 = upper_freq_1 + lower_freq_1
+    symbol_sync_1 = np.argmax(combine_1)
+
+    upper_freq_2 = psd_sync_2[center : center + bins ]
+    lower_freq_2 = psd_sync_2[center - bins: center]
+    combine_2 = upper_freq_2 + lower_freq_2
+    symbol_sync_2 = np.argmax(combine_2)
+
+    if (symbol_sync_1 == opts.sync_sym):
+        global_index_that_start_a_payload += 1
+    elif (symbol_sync_2 == opts.sync_sym):
+        global_index_that_start_a_payload -= 0
+    
+    ################################# ONE MORE MODULE PLEASE #####################################
     
     return global_index_that_start_a_payload,CFO_FINAL,lag_samples,correction_factor_by_cfo_total
 
