@@ -34,6 +34,8 @@ def upload():
 
     ######################## TES SENSING PREAMBLE #############################
     index_payload, cfo, sto, correction_euler = correction_cfo_sto(opts, LoRa, np_lora_signal)
+    if index_payload is None:
+        return jsonify({"status": "fail"}), 400
     print("index payload", index_payload)
     framePerSymbol = int(opts.n_classes * (opts.fs / opts.bw))
     payload = np_lora_signal[int(index_payload * framePerSymbol) + (int(sto)):] 

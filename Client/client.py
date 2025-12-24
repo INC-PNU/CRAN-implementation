@@ -78,27 +78,26 @@ def send_lora_to_server(opts,noise_seed):
     response = requests.post(url, json=payload)
     return response
 
+cfo_ = 977 #1021
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = 1055
-opts.numb_offset = 508
+opts.CFO = cfo_
+opts.numb_offset = 0
 opts.gateway_id = 1
 opts.snr = 12
 send_lora_to_server(opts,1)
 ############### PARAM INITIALIZATION THEN SEND ##############################
-
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = 1056
-opts.numb_offset = 508
+opts.CFO = cfo_ * -1
+opts.numb_offset = 1020
 opts.gateway_id = 2
 opts.snr = 12
 send_lora_to_server(opts,1)
-
 ############### FAIL ##############################
 # opts.sf = 9
 # opts.bw = 125_000
@@ -109,3 +108,33 @@ send_lora_to_server(opts,1)
 # opts.gateway_id = 1
 # opts.snr = 12
 # send_lora_to_server(opts,1)
+
+############### FAIL2 ##############################
+# opts.sf = 9
+# opts.bw = 125_000
+# opts.fs = 1_000_000
+# opts.n_classes = 2 ** opts.sf
+# opts.CFO = -1106
+# opts.numb_offset = 508
+# opts.gateway_id = 2
+# opts.snr = 12
+# send_lora_to_server(opts,1)
+
+############### FAIL lag sample ##############################
+# opts.sf = 9
+# opts.bw = 125_000
+# opts.fs = 1_000_000
+# opts.n_classes = 2 ** opts.sf
+# opts.CFO = cfo_ * -1
+# opts.numb_offset = 508
+# opts.gateway_id = 2
+# opts.snr = -12
+############### FAIL lag sample ##############################
+# opts.sf = 9
+# opts.bw = 125_000
+# opts.fs = 1_000_000
+# opts.n_classes = 2 ** opts.sf
+# opts.CFO = cfo_ * -1
+# opts.numb_offset = 0
+# opts.gateway_id = 2
+# opts.snr = -14
