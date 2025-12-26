@@ -78,26 +78,26 @@ def send_lora_to_server(opts,noise_seed):
     response = requests.post(url, json=payload)
     return response
 
-cfo_ = 977 #1021
+cfo_ = 980 #1021
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
 opts.CFO = cfo_
-opts.numb_offset = 0
+opts.numb_offset = 100
 opts.gateway_id = 1
-opts.snr = 12
-send_lora_to_server(opts,1)
+opts.snr = 0
+send_lora_to_server(opts,23)
 ############### PARAM INITIALIZATION THEN SEND ##############################
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
 opts.CFO = cfo_ * -1
-opts.numb_offset = 1020
+opts.numb_offset = 100
 opts.gateway_id = 2
-opts.snr = 12
-send_lora_to_server(opts,1)
+opts.snr = -12
+send_lora_to_server(opts,2)
 ############### FAIL ##############################
 # opts.sf = 9
 # opts.bw = 125_000

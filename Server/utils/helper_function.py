@@ -125,9 +125,8 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
             preamble_found_index = i
             dechirped_1 = rx_samples[(i-1)*framePerSymbol:(i-1)*framePerSymbol + framePerSymbol] * down_chirp_signal
             dechirped_2 = rx_samples[(i)*framePerSymbol:(i)*framePerSymbol + framePerSymbol] * down_chirp_signal
-            phase_diff = np.angle(np.vdot(dechirped_1, dechirped_2))
-               
-            CFO_FRAC = (phase_diff / (2*np.pi)) * opts.bw / opts.n_classes
+            phase_diff = np.angle(np.vdot(dechirped_1, dechirped_2))           
+            CFO_FRAC = (phase_diff * opts.bw ) / (2*np.pi * opts.n_classes)
                  
         if preamble_found:
             correction_factor_by_cfo_frac = np.exp(-1j * 2 * np.pi * (CFO_FRAC)* t)
@@ -286,7 +285,7 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     elif (type_type == 2):
         CFO = round_right_right_zero(CFO)
     print(CFO)
-    CFO_INT_HZ = (CFO / opts.n_classes) * opts.bw
+    CFO_INT_HZ = (CFO * opts.bw) / opts.n_classes 
 
     print(f"-----------Under Test RESULT {opts.gateway_id}----------------")
     print("CFO HZ INT: ",CFO_INT_HZ)
