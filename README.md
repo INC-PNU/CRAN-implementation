@@ -20,3 +20,11 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
+
+# Initialize Database MongodB 
+
+databases : cran
+
+collections : 
+- processed_iq_signals
+- raw_iq_signals

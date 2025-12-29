@@ -32,12 +32,7 @@ def upload():
     
     # Convert base64 IQ data to numpy array
     np_lora_signal = read_base64_convert_to_np(b64_lora_signal)
-    print("dtype:", np_lora_signal.dtype)
-    print("shape:", np_lora_signal.shape)
-    print("bytes:", np_lora_signal.nbytes)
-    print("samples per symbol:", np_lora_signal.shape[0] // 10)
     size_bytes = np_lora_signal.nbytes
-    print(size_bytes)
     # Set the opts for this request
     opts = type('', (), {})()  # Create an empty object for opts
     opts.sf = sf
