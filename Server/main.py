@@ -3,6 +3,15 @@ from utils.helper_function import *
 import config
 from utils.LoRa import LoRa
 app = Flask(__name__)
+from pymongo import MongoClient
+import time
+####### Initialize MONGO DATABASE ############
+client = MongoClient("mongodb://localhost:27017")
+db = client.cran
+raw_db = db.raw_iq_signals
+proc_db = db.processed_iq_signals
+
+####### Initialize MONGO DATABASE ############
 
 @app.route('/upload', methods=['POST'])
 def upload():
@@ -13,6 +22,7 @@ def upload():
     bw = data.get("bw", 125_000)  # Default value if not provided
     sf = data.get("sf", 9)       # Default value if not provided
     fs = data.get("fs", 1_000_000)  # Default value if not provided
+    snr = data.get("snr") 
     sync_sym = data.get("sync",8)
     # Print gateway_id for debugging
     print("\nReceived from:", gateway_id)
@@ -22,7 +32,12 @@ def upload():
     
     # Convert base64 IQ data to numpy array
     np_lora_signal = read_base64_convert_to_np(b64_lora_signal)
-   
+    print("dtype:", np_lora_signal.dtype)
+    print("shape:", np_lora_signal.shape)
+    print("bytes:", np_lora_signal.nbytes)
+    print("samples per symbol:", np_lora_signal.shape[0] // 10)
+    size_bytes = np_lora_signal.nbytes
+    print(size_bytes)
     # Set the opts for this request
     opts = type('', (), {})()  # Create an empty object for opts
     opts.sf = sf
@@ -32,6 +47,21 @@ def upload():
     opts.sync_sym = sync_sym
     opts.gateway_id = gateway_id
 
+    file_path = save_iq_to_disk(np_lora_signal, dir="raw_iq_signals")
+    unix_time = time.time_ns()
+    inserted_raw_db = raw_db.insert_one({
+        "gw" : gateway_id,
+        "time": unix_time,
+        "meta": {
+            "sf" : opts.sf,
+            "bw" :opts.bw,
+            "fs" : opts.fs,
+            "snr" : snr
+        },
+        "size_bytes": size_bytes,
+        "location": file_path
+    }).inserted_id
+    print("Inserted id : ",inserted_raw_db)
     ######################## TES SENSING PREAMBLE #############################
     index_payload, cfo, sto, correction_euler = correction_cfo_sto(opts, LoRa, np_lora_signal)
     if index_payload is None:
@@ -39,6 +69,24 @@ def upload():
     print("index payload", index_payload)
     framePerSymbol = int(opts.n_classes * (opts.fs / opts.bw))
     payload = np_lora_signal[int(index_payload * framePerSymbol) + (int(sto)):] 
+    file_path2 = save_iq_to_disk(payload, dir="proc_iq_signals")
+    size_bytes2 = payload.nbytes
+    unix_time2 = time.time_ns()
+    inserted_proc_db = proc_db.insert_one({
+        "gw" : gateway_id,
+        "time": unix_time2,
+        "meta": {
+            "sf" : opts.sf,
+            "bw" :opts.bw,
+            "fs" : opts.fs,
+            "cfo" : cfo,
+            "sto" : sto,
+            "snr" : snr
+        },
+        "size_bytes": size_bytes2,
+        "location": file_path2
+    }).inserted_id
+    print("Inserted id : ",inserted_proc_db)
     
     return jsonify({"status": "success"}), 200
 
@@ -49,4 +97,5 @@ if __name__ == '__main__':
     # opts.bw = 125_000
     # opts.fs = 1_000_000
     # opts.n_classes = 2 ** opts.sf
+
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=False) 

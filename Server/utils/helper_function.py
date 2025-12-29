@@ -658,3 +658,22 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
 #     # b = len(correction_factor_10)
 #     # rx_samples_corrected_sto_corrected_cfo = (rx_samples * correction_factor_10)[peak_index:]
 #     return Index_that_start_a_down_chirp,CFO_FINAL,correction_factor
+from pathlib import Path
+import time
+import uuid
+def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
+    """
+    Saves numpy array to disk and returns the full file path.
+    """
+    PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    RAW_IQ_DIR = PROJECT_ROOT / "storage" / dir
+    RAW_IQ_DIR.mkdir(parents=True, exist_ok=True)
+
+    # unique filename
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    fname = f"iq_{ts}_{uuid.uuid4().hex}.npy"
+    fpath = RAW_IQ_DIR / fname
+
+    # Save .npy (keeps dtype/shape)
+    np.save(fpath, np_lora_signal, allow_pickle=False)
+    return str(fpath)

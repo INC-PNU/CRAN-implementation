@@ -40,7 +40,7 @@ def send_lora_to_server(opts,noise_seed):
 
     preamble= create_lora_preamble(opts,LoRa)
     print(preamble.shape)
-    sequence = [206,3,4,23,55,44,33,22,11]
+    sequence = [0,256,0,256,100,100,1,2,3,256]
     payload = create_lora_payload(opts,LoRa,sequence)
 
     sequence_ = [999,454]
@@ -72,13 +72,14 @@ def send_lora_to_server(opts,noise_seed):
         "iq_data": iq_b64,
         "bw" : opts.bw,  # Default value if not provided
         "sf" : opts.sf,      # Default value if not provided
-        "fs" : opts.fs
+        "fs" : opts.fs,
+        "snr" : opts.snr
     }
 
     response = requests.post(url, json=payload)
     return response
 
-cfo_ = 980 #1021
+cfo_ = 1021 #1021
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
@@ -86,7 +87,7 @@ opts.n_classes = 2 ** opts.sf
 opts.CFO = cfo_
 opts.numb_offset = 100
 opts.gateway_id = 1
-opts.snr = 0
+opts.snr = 3
 send_lora_to_server(opts,23)
 ############### PARAM INITIALIZATION THEN SEND ##############################
 opts.sf = 9
@@ -96,7 +97,7 @@ opts.n_classes = 2 ** opts.sf
 opts.CFO = cfo_ * -1
 opts.numb_offset = 100
 opts.gateway_id = 2
-opts.snr = -12
+opts.snr = -5
 send_lora_to_server(opts,2)
 ############### FAIL ##############################
 # opts.sf = 9
