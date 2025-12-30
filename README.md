@@ -1,27 +1,28 @@
 # CRAN-implementation
 Cloud Radio Access Network (CRAN) Implementation for LoRa 
 
-# Windows (CMD)
+# Initialization
+## Windows (CMD)
 ```
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-# Windows (Git Bash)
-```
+## Windows (Git Bash)
+```bash
 python -m venv venv
 source venv/Scripts/activate
 pip install -r requirements.txt
 ```
-# Mac OS
+## Mac OS
 ```
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-# Initialize Database MongodB 
+## Initialize Database MongodB 
 Download and install from : https://www.mongodb.com/try/download/community
 
 databases : cran
@@ -30,6 +31,30 @@ collections :
 - processed_iq_signals
 - raw_iq_signals
 
+## Summary run all process 
+
+- Server
+```bash
+cd Server
+python main.py
+```
+Note : Run once, works like Server as Common
+
+in the new terminal
+```bash
+cd Server
+python combiner_worker.py
+```
+Note : Run once, works like watcher
+
+- Client
+```bash
+cd Client
+python Client.py
+```
+Run everytime want to send signal, works like client
+
+### ----------------------------------------------------------------------------------------------
 # CRAN-Based LoRa Signal Combining
 
 ## Brief Overview
@@ -125,26 +150,3 @@ testing.ipynb
 ```
 
 2. The notebook loads raw, processed, and combined IQ signals and displays the results for analysis.
-
-## Summary run all process 
-
-- Server
-```bash
-cd Server
-python main.py
-```
-Note : Run once, works like Server as Common
-
-New Terminal
-```bash
-cd Server
-python combiner_worker.py
-```
-Note : Run once, works like watcher
-
-- Client
-```bash
-cd Client
-python Client.py
-```
-Run everytime want to send signal, works like client
