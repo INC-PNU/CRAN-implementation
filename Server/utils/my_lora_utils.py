@@ -181,9 +181,9 @@ def estimate_symbol_custom(a,title,sf,fs,bw,tresshold = 0):
 
     combine = upper_freq + lower_freq
     # Step 5: Find peak (max bin)
-    print(np.max(upper_freq))
-    print(np.max(lower_freq))
-    print(np.max(combine)) 
+    print("Upper freq max value :",np.max(upper_freq))
+    print("Lower freq max value :",np.max(lower_freq))
+    print("Combine freq max value :",np.max(combine)) 
     symbol = np.argmax(combine)
     
     return symbol,max_index

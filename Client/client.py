@@ -77,31 +77,31 @@ opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = cfo_
-opts.numb_offset = 23
+opts.CFO = 0
+opts.numb_offset = 0
 opts.gateway_id = 1
-opts.snr = -10
-send_lora_to_server(opts,20)
+opts.snr = -15
+send_lora_to_server(opts,12)
 ############### PARAM INITIALIZATION THEN SEND ##############################
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = 342
-opts.numb_offset = 54
+opts.CFO = 0
+opts.numb_offset = 0
 opts.gateway_id = 2
-opts.snr = -10
-send_lora_to_server(opts,13)
+opts.snr = -15
+send_lora_to_server(opts,16)
 ############### FAIL ##############################
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = 213
-opts.numb_offset = 1
+opts.CFO = 0
+opts.numb_offset = 0
 opts.gateway_id = 3
-opts.snr = -10
-send_lora_to_server(opts,5)
+opts.snr = -18
+send_lora_to_server(opts,2)
 
 ############### FAIL2 ##############################
 # opts.sf = 9
