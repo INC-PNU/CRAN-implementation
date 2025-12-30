@@ -165,20 +165,9 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     center = fft_len // 2
     bins = opts.n_classes
     upper_freq = psd_up[center : center + bins ]
-    # print("argmax upper :",np.argmax(upper_freq))
-    # print(upper_freq[np.argmax(upper_freq) -2])
-    # print(upper_freq[np.argmax(upper_freq) -1])
-    # print(upper_freq[np.argmax(upper_freq) ])
-    # print(upper_freq[np.argmax(upper_freq) +1])
-    # print(upper_freq[np.argmax(upper_freq) +2])
     lower_freq = psd_up[center - bins: center]
-    # print("argmax lower :",np.argmax(lower_freq))
-    # print(lower_freq[np.argmax(lower_freq) -2])
-    # print(lower_freq[np.argmax(lower_freq) -1])
-    # print(lower_freq[np.argmax(lower_freq) ])
-    # print(lower_freq[np.argmax(lower_freq) +1])
-    # print(lower_freq[np.argmax(lower_freq) +2])
     combine = upper_freq + lower_freq
+
     #I WANT TO TRY FIND STO FRACTIONAL #
     choose_index = np.argmax(combine)
     next_index = (choose_index + 1) % opts.n_classes
@@ -189,50 +178,17 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     next_value = combine[next_index]
     def timing_error_nonlinear(TE_raw, A=4.0, B=2.5):
         return A * np.tanh(B * TE_raw)
-    if (next_value > prev_value):
-        print("left")## STO Frac shifting to right
+    if (next_value > prev_value): 
         diff = next_value - prev_value
         TE_raw = diff/combine[choose_index]
-        # print(TE_raw)
         sto_offset = timing_error_nonlinear(TE_raw)
-        # print(sto_offset)
     else:
-        print("right")
         diff = prev_value - next_value
         TE_raw = diff/combine[choose_index]
-        # print(TE_raw)
         sto_offset = timing_error_nonlinear(TE_raw)
-        # print(sto_offset)
-        ## STO Frac shifting to left
-    #I WANT TO TRY FIND STO FRACTIONAL #
-
-    # print(combine[np.argmax(combine) -2])
-    # print(combine[np.argmax(combine) -1])
-    # print(combine[np.argmax(combine) ])
-    # print(combine[np.argmax(combine) +1])
-    # print(combine[np.argmax(combine) +2])
-    # Step 5: Find peak (max bin)
+  
     symbol_up = np.argmax(combine)
-    # print("SYMBOL-TESTING-UP",symbol_up)
-
-############ TESTES DELETE SOON
-    # n = len(dechirped_up)  # Length of the signal
-    # fft_signal = np.fft.fft(dechirped_up)
-    # fft_signal = np.fft.fftshift(fft_signal)  # Shift zero frequency to center
-    # T = 1.0 / opts.fs # Sampling period
-    # # Generate corresponding frequency axis
-    # frequencies = np.fft.fftfreq(n, T)  # Frequency axis
-    # frequencies = np.fft.fftshift(frequencies)  # Shift frequency axis
-
-    # Plot the FFT result (magnitude of the FFT)
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(frequencies, np.abs(fft_signal))  # Plot magnitude of FFT
-    # plt.title('FFT of the Signal')
-    # plt.xlabel('Frequency (Hz)')
-    # plt.ylabel('Magnitude')
-    # plt.grid(True)
-    # plt.show()
-############ TESTES DELETE SOON
+   
     psd_down = np.abs(np.fft.fftshift(np.fft.fft(dechirped_down)))
 
     fft_len = len(psd_down)
@@ -245,46 +201,36 @@ def correction_cfo_sto(opts,LoRa,rx_samples):
     choose_index = np.argmax(combine)
     next_index = (choose_index + 1) % opts.n_classes
     prev_index = (choose_index - 1 + opts.n_classes) % opts.n_classes
-    # print("next index",next_index)
-    # print(prev_index)
+  
     prev_value = combine[prev_index]
     next_value = combine[next_index]
-    def timing_error_nonlinear(TE_raw, A=4.0, B=2.5):
+
+    def timing_error_nonlinear(TE_raw, A=4.0, B=2.5): #REVISE SOON
         return A * np.tanh(B * TE_raw)
-    if (next_value > prev_value):
-        print("DOWN left")## STO Frac shifting to right
+    
+    if (next_value > prev_value):      
         diff = next_value - prev_value
         TE_raw = diff/combine[choose_index]
-        # print(TE_raw)
         type_type = 1
         sto_offset = timing_error_nonlinear(TE_raw)
-        # print(sto_offset)
+        
     else:
-        print("DOWN right")
         diff = prev_value - next_value
         TE_raw = diff/combine[choose_index]
-        # print(TE_raw)
         type_type = 2
         sto_offset = timing_error_nonlinear(TE_raw)
-        # print(sto_offset)
-
+      
     # Step 5: Find peak (max bin)
     symbol_down = np.argmax(combine)
-    # print(combine[np.argmax(combine) -2])
-    # print(combine[np.argmax(combine) -1])
-    # print(combine[np.argmax(combine) ])
-    # print(combine[np.argmax(combine) +1])
-    # print(combine[np.argmax(combine) +2])
-    # print("SYMBOL-TESTING-down",symbol_down)
   
     CFO = (symbol_up + symbol_down)/2  
     CFO = to_nearest_N_center(CFO,opts.n_classes) ## Only can recover a CFO limited to the range [􀀀BW=4;BW=4].
-    print(CFO)
+    
     if(type_type == 1):
         CFO = round_left_left_zero(CFO) # If positif, round to upper, if negative round to lower
     elif (type_type == 2):
         CFO = round_right_right_zero(CFO)
-    print(CFO)
+    
     CFO_INT_HZ = (CFO * opts.bw) / opts.n_classes 
 
     print(f"-----------Under Test RESULT {opts.gateway_id}----------------")

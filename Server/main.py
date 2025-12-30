@@ -50,7 +50,6 @@ def upload():
     unix_time = time.time_ns()
     timestamp_sec = unix_time / 1_000_000_000
     bucket_sec = (int(timestamp_sec) // WINDOW_CAPTURES_DEADLINE_SEC) * WINDOW_CAPTURES_DEADLINE_SEC
-    print(bucket_sec)
    
     key_str = f"{sf}|{bw}|{fs}|{bucket_sec}" #Create signatures
     temp_key = hashlib.sha1(key_str.encode()).hexdigest() #Create hash signatures
@@ -67,12 +66,13 @@ def upload():
         "size_bytes": size_bytes,
         "location": file_path
     }).inserted_id
-    print("Inserted id : ",inserted_raw_db)
+    
     ######################## TES SENSING PREAMBLE #############################
     index_payload, cfo, sto, correction_euler = correction_cfo_sto(opts, LoRa, np_lora_signal)
     if index_payload is None:
+        print("\nFAILED Detect LoRa Preamble or perform syncronization detection")
         return jsonify({"status": "fail"}), 400
-    print("index payload", index_payload)
+   
     framePerSymbol = int(opts.n_classes * (opts.fs / opts.bw))
     payload = np_lora_signal[int(index_payload * framePerSymbol) + (int(sto)):] 
     file_path2 = save_iq_to_disk(payload, dir="proc_iq_signals")
@@ -93,7 +93,7 @@ def upload():
         "size_bytes": size_bytes2,
         "location": file_path2
     }).inserted_id
-    print("Inserted id : ",inserted_proc_db)
+    
     now = time.time()
     # 2) create/update job, but freeze deadline based on first_seen
     job = jobs.find_one_and_update(
@@ -114,11 +114,5 @@ def upload():
     return jsonify({"status": "success"}), 200
 
 if __name__ == '__main__':
-    # parser = config.create_parser()
-    # opts = parser.parse_args()
-    # opts.sf = 10
-    # opts.bw = 125_000
-    # opts.fs = 1_000_000
-    # opts.n_classes = 2 ** opts.sf
 
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=False) 

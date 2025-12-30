@@ -39,33 +39,26 @@ url = "http://127.0.0.1:5000/upload"
 def send_lora_to_server(opts,noise_seed):
 
     preamble= create_lora_preamble(opts,LoRa)
-    print(preamble.shape)
     sequence = [0,256,0,256,100,100,1,2,3,256]
     payload = create_lora_payload(opts,LoRa,sequence)
 
     sequence_ = [999,454]
     random_ZONK = create_lora_payload(opts,LoRa,sequence_)
 
-    print(payload.shape)
     complete_signal_ = np.concatenate([random_ZONK,preamble,payload]).astype(np.complex64)
     complete_signal_cfo = add_cfo(opts,complete_signal_,opts.CFO)
 
     complete_signal_cfo_sto = complete_signal_cfo[opts.numb_offset:]
-    print(type(complete_signal_cfo_sto))
-    print(complete_signal_cfo_sto.dtype) 
+
     if (noise_seed >= 0):
         Lora_function_init = LoRa(opts.sf, opts.bw)
         complete_signal_cfo_sto = Lora_function_init.awgn_iq_with_seed(complete_signal_cfo_sto, opts.snr, seed=noise_seed)
-    print(complete_signal_cfo_sto.dtype) 
-    print(type(complete_signal_cfo_sto))
-    print("sean")
+    
     # complete_signal_cfo_sto = complete_signal_cfo
-    print("CFO use : ",opts.CFO)
-    print("Sampling Offset use : ",opts.numb_offset)
-    print(complete_signal_cfo_sto.shape)
+    
     iq_bytes = complete_signal_cfo_sto.tobytes()            # convert to bytes
     iq_b64 = base64.b64encode(iq_bytes).decode()    # encode to Base64, then encode to string
-    print(complete_signal_cfo_sto.shape)
+    
     payload = {
         "gateway_id": f'GW{opts.gateway_id}',
         "value": f"Hello from GW{opts.gateway_id}",
@@ -85,30 +78,30 @@ opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
 opts.CFO = cfo_
-opts.numb_offset = 100
+opts.numb_offset = 23
 opts.gateway_id = 1
-opts.snr = 3
-send_lora_to_server(opts,23)
+opts.snr = -10
+send_lora_to_server(opts,20)
 ############### PARAM INITIALIZATION THEN SEND ##############################
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = cfo_ * -1
-opts.numb_offset = 100
+opts.CFO = 342
+opts.numb_offset = 54
 opts.gateway_id = 2
-opts.snr = -5
-send_lora_to_server(opts,2)
+opts.snr = -10
+send_lora_to_server(opts,13)
 ############### FAIL ##############################
-# opts.sf = 9
-# opts.bw = 125_000
-# opts.fs = 1_000_000
-# opts.n_classes = 2 ** opts.sf
-# opts.CFO = 1050
-# opts.numb_offset = 508
-# opts.gateway_id = 1
-# opts.snr = 12
-# send_lora_to_server(opts,1)
+opts.sf = 9
+opts.bw = 125_000
+opts.fs = 1_000_000
+opts.n_classes = 2 ** opts.sf
+opts.CFO = 213
+opts.numb_offset = 1
+opts.gateway_id = 3
+opts.snr = -10
+send_lora_to_server(opts,5)
 
 ############### FAIL2 ##############################
 # opts.sf = 9
