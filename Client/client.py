@@ -72,36 +72,57 @@ def send_lora_to_server(opts,noise_seed):
     response = requests.post(url, json=payload)
     return response
 
-cfo_ = 1021 #1021
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = 0
-opts.numb_offset = 0
+opts.CFO = 1106
+opts.numb_offset = 508
 opts.gateway_id = 1
-opts.snr = -15
+opts.snr = -23 #-23
 send_lora_to_server(opts,12)
-############### PARAM INITIALIZATION THEN SEND ##############################
+
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
 opts.CFO = 0
-opts.numb_offset = 0
+opts.numb_offset = 3205
 opts.gateway_id = 2
-opts.snr = -15
-send_lora_to_server(opts,16)
-############### FAIL ##############################
-opts.sf = 9
-opts.bw = 125_000
-opts.fs = 1_000_000
-opts.n_classes = 2 ** opts.sf
-opts.CFO = 0
-opts.numb_offset = 0
-opts.gateway_id = 3
-opts.snr = -18
-send_lora_to_server(opts,2)
+opts.snr = 100
+send_lora_to_server(opts,1)
+
+##Fail juga
+# opts.sf = 9
+# opts.bw = 125_000
+# opts.fs = 1_000_000
+# opts.n_classes = 2 ** opts.sf
+# opts.CFO = 1106
+# opts.numb_offset = 508
+# opts.gateway_id = 1
+# opts.snr = -23 #-23
+# send_lora_to_server(opts,12)
+
+# opts.sf = 9
+# opts.bw = 125_000
+# opts.fs = 1_000_000
+# opts.n_classes = 2 ** opts.sf
+# opts.CFO = 0
+# opts.numb_offset = 0
+# opts.gateway_id = 2
+# opts.snr = -20
+# send_lora_to_server(opts,1)
+
+# ############### FAIL ##############################
+# opts.sf = 9
+# opts.bw = 125_000
+# opts.fs = 1_000_000
+# opts.n_classes = 2 ** opts.sf
+# opts.CFO = 0
+# opts.numb_offset = 0
+# opts.gateway_id = 3
+# opts.snr = -18
+# send_lora_to_server(opts,2)
 
 ############### FAIL2 ##############################
 # opts.sf = 9

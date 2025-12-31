@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify
 from utils.helper_function import *
-import config
 from utils.LoRa import LoRa
 app = Flask(__name__)
 from pymongo import MongoClient, ReturnDocument
@@ -28,6 +27,7 @@ def upload():
     fs = data.get("fs", 1_000_000)  # Default value if not provided
     snr = data.get("snr") 
     sync_sym = data.get("sync",8)
+    no_of_preamble = data.get("preamble",8)
     # Print gateway_id for debugging
     print("\nReceived from:", gateway_id)
     print("Received BW:", bw)
@@ -45,6 +45,7 @@ def upload():
     opts.n_classes = 2 ** opts.sf
     opts.sync_sym = sync_sym
     opts.gateway_id = gateway_id
+    opts.no_of_preamble = no_of_preamble 
 
     file_path = save_iq_to_disk(np_lora_signal, dir="raw_iq_signals")
     unix_time = time.time_ns()
@@ -68,7 +69,7 @@ def upload():
     }).inserted_id
     
     ######################## TES SENSING PREAMBLE #############################
-    index_payload, cfo, sto, correction_euler = correction_cfo_sto(opts, LoRa, np_lora_signal)
+    index_payload, cfo, sto, correction_euler = detect_cfo_sto(opts, LoRa, np_lora_signal)
     if index_payload is None:
         print("\nFAILED Detect LoRa Preamble or perform syncronization detection")
         return jsonify({"status": "fail"}), 400
