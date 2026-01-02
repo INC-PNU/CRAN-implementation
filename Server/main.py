@@ -81,6 +81,8 @@ def upload():
     if index_payload is None:
         print("\nFAILED Detect LoRa Preamble or perform syncronization detection")
         GLOBAL_STATS["preamble_undetected"] += 1
+        print("-----------SUMMARY----------")
+        print(GLOBAL_STATS)
         return jsonify({"status": "fail"}), 400
    
     framePerSymbol = int(opts.n_classes * (opts.fs / opts.bw))
@@ -88,57 +90,52 @@ def upload():
     file_path2 = save_iq_to_disk(payload, dir="proc_iq_signals")
     size_bytes2 = payload.nbytes
     unix_time2 = time.time_ns()
-    # inserted_proc_db = proc_db.insert_one({
-    #     "gw" : gateway_id,
-    #     "time": unix_time2,
-    #     "temp_key" : temp_key,
-    #     "meta": {
-    #         "sf" : opts.sf,
-    #         "bw" :opts.bw,
-    #         "fs" : opts.fs,
-    #         "cfo" : cfo,
-    #         "sto" : sto,
-    #         "snr" : snr
-    #     },
-    #     "size_bytes": size_bytes2,
-    #     "location": file_path2
-    # }).inserted_id
+    inserted_proc_db = proc_db.insert_one({
+        "gw" : gateway_id,
+        "time": unix_time2,
+        "temp_key" : temp_key,
+        "meta": {
+            "sf" : opts.sf,
+            "bw" :opts.bw,
+            "fs" : opts.fs,
+            "cfo" : cfo,
+            "sto" : sto,
+            "snr" : snr
+        },
+        "size_bytes": size_bytes2,
+        "location": file_path2
+    }).inserted_id
     
     now = time.time()
     # 2) create/update job, but freeze deadline based on first_seen
-    # job = jobs.find_one_and_update(
-    #     {"temp_key": temp_key},
-    #     {
-    #         "$setOnInsert": {
-    #             "state": "OPEN",
-    #             "first_seen": now,
-    #             "deadline": now + WINDOW_CAPTURES_DEADLINE_SEC,
-    #         },
-    #         "$inc": {"num_captures": 1},
-    #         "$set": {"updated_at": now},
-    #     },
-    #     upsert=True,
-    #     return_document=ReturnDocument.AFTER
-    # )
+    job = jobs.find_one_and_update(
+        {"temp_key": temp_key},
+        {
+            "$setOnInsert": {
+                "state": "OPEN",
+                "first_seen": now,
+                "deadline": now + WINDOW_CAPTURES_DEADLINE_SEC,
+            },
+            "$inc": {"num_captures": 1},
+            "$set": {"updated_at": now},
+        },
+        upsert=True,
+        return_document=ReturnDocument.AFTER
+    )
 
     ## TESTING AND VALIDATION
     GT_ = [0,256,0,256,100,100,1,2,3,256]
     tes_signal = payload
     N = tes_signal.shape[0]
     t = np.arange(N) / fs
-    # corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
-    corrected_cfo = tes_signal## INI SALAH
+    corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
     
     a = calculate_symbol_alliqfile_with_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
-    b,tags = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
-   
     diff_count = np.sum(a != GT_)
-    diff_count2 = np.sum(b != GT_)
-    
+  
     GLOBAL_STATS["false"] += diff_count
-    # GLOBAL_STATS["false"] += diff_count2
     GLOBAL_STATS["total"] += (len(GT_) - diff_count)
-    # GLOBAL_STATS["total"] += (len(GT_) - diff_count2)  
+   
     ##
     print("-----------SUMMARY----------")
     print(GLOBAL_STATS)
@@ -146,5 +143,4 @@ def upload():
     return jsonify({"status": "success"}), 200
 
 if __name__ == '__main__':
-
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=False) 

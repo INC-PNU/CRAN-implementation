@@ -6,6 +6,9 @@ import math
 from collections import Counter
 from scipy.signal import correlate
 from scipy.interpolate import CubicSpline
+from pathlib import Path
+import time
+import uuid
 
 def predict_te(x):
     
@@ -94,7 +97,6 @@ def round_left_left_zero(x):
 def to_nearest_N_center(x,n_classes):
     return x - (n_classes//2) * round(x / (n_classes//2))
 
-
 def estimate_cfo_frac(
     opts, # important parameter
     s, # signal
@@ -142,6 +144,23 @@ def make_decision_if_preamble_exist(Current_symbol,treshold,N):
     else :
         return False
     
+def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
+    """
+    Saves numpy array to disk and returns the full file path.
+    """
+    PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    RAW_IQ_DIR = PROJECT_ROOT / "storage" / dir
+    RAW_IQ_DIR.mkdir(parents=True, exist_ok=True)
+
+    # unique filename
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    fname = f"iq_{ts}_{uuid.uuid4().hex}.npy"
+    fpath = RAW_IQ_DIR / fname
+
+    # Save .npy (keeps dtype/shape)
+    np.save(fpath, np_lora_signal, allow_pickle=False)
+    return str(fpath)
+
 ## Versi 3 ##
 ## different approach for finding argMax #
 def detect_cfo_sto(opts,LoRa,rx_samples):
@@ -168,7 +187,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     while (total_buffer < len(rx_samples) and keep_going):
         frameBuffer = rx_samples[total_buffer:(total_buffer + framePerSymbol)]
         total_buffer = total_buffer + framePerSymbol
-        # print(i, "Preamble found: ", preamble_found)
+        
         if (len(frameBuffer) != len(down_chirp_signal)):
             ## tHIS MEANS , THIS IS THE END OF BUFFER
             if (preamble_found == False):  
@@ -178,9 +197,8 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
                 print("Preamble found , but cannot find down chirp")
                 return None,None,None,None
         ### DECHIRPED WITH UP CHIRP    
-        preamble_symbol,unused = estimate_symbol(opts,LoRa,frameBuffer)
+        preamble_symbol,_ = estimate_symbol(opts,LoRa,frameBuffer)
           
-        # maxAmplitude_up = np.argmax(np.abs(np.fft.fft(dechirp_up)))
         Current_symbol = np.append(Current_symbol[1:], preamble_symbol)
         have_preamble_detected = make_decision_if_preamble_exist(Current_symbol,THRESHOLD_FOR_PREAMBLE_DETECTION,framePerSymbol)
         
@@ -188,10 +206,6 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
             #### PREAMBLE FOUND
             preamble_found = True
             preamble_found_index = i
-            # dechirped_1 = rx_samples[(i-1)*framePerSymbol:(i-1)*framePerSymbol + framePerSymbol] * down_chirp_signal
-            # dechirped_2 = rx_samples[(i)*framePerSymbol:(i)*framePerSymbol + framePerSymbol] * down_chirp_signal
-            # phase_diff = np.angle(np.vdot(dechirped_1, dechirped_2))           
-            # CFO_FRAC = (phase_diff * opts.bw ) / (2*np.pi * opts.n_classes)
                  
         if preamble_found:
             # correction_factor_by_cfo_frac = np.exp(-1j * 2 * np.pi * t)
@@ -217,8 +231,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
                     # handle gracefully: return failure / adjust / log
                     if (dechirped_max[Local_Index_that_start_a_down_chirp] < dechirped_max[Local_Index_that_start_a_down_chirp + 1]):
                         Local_Index_that_start_a_down_chirp += 1  #Choose second downchirp, might have better signal
-                    # print("MASUK KAH ??")
-                # print(Local_Index_that_start_a_down_chirp)
+                    
                 global_index_that_start_a_down_chirp = preamble_found_index + Local_Index_that_start_a_down_chirp
                 keep_going = False
               
@@ -249,8 +262,6 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     choose_index = np.argmax(combine)
     next_index = (choose_index + 1) % opts.n_classes
     prev_index = (choose_index - 1 + opts.n_classes) % opts.n_classes
-    # print("next index",next_index)
-    # print(prev_index)
     prev_value = combine[prev_index]
     next_value = combine[next_index]
     def timing_error_nonlinear(TE_raw, A=4.0, B=2.5):
@@ -335,20 +346,20 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     CFO_FINAL = CFO_INT_HZ + CFO_FRAC_estimation
     print("OUR CFO ESTIMATION IS : ",CFO_FINAL)
 
-    ############### MODUL STO V2 (FAILED) #######################################
+    # ############### MODUL STO V2 (FAILED) #######################################
     
-    print(symbol_up)
-    print(CFO_INT_HZ)
-    STO_Testing = (CFO_INT_HZ * opts.n_classes / opts.bw)
-    print(STO_Testing)
-    different = STO_Testing - symbol_up
-    STO_FRAC = shift_sto_index
-    STO_INT = int(different * (opts.fs/opts.bw))
-    # print(STO_INT)
-    # print(STO_FRAC)
-    # print("METHODE 2 FIND STO = ",STO_INT + STO_FRAC)
-    # print("THISSSSSSSS")
-    ################### MODUL STO  V2 (FAILED) ###################################
+    # print(symbol_up)
+    # print(CFO_INT_HZ)
+    # STO_Testing = (CFO_INT_HZ * opts.n_classes / opts.bw)
+    # print(STO_Testing)
+    # different = STO_Testing - symbol_up
+    # STO_FRAC = shift_sto_index
+    # STO_INT = int(different * (opts.fs/opts.bw))
+    # # print(STO_INT)
+    # # print(STO_FRAC)
+    # # print("METHODE 2 FIND STO = ",STO_INT + STO_FRAC)
+    # # print("THISSSSSSSS")
+    # ################### MODUL STO  V2 (FAILED) ###################################
 
     ################### MODUL STO V1 Better so far ###################################
     correction_factor_by_cfo_total = np.exp(-1j * 2 * np.pi * (CFO_FINAL)* t)
@@ -357,7 +368,6 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     peak_index = np.argmax(np.abs(corr))
     lag_samples = peak_index - (samplePerSymbol - 1)  # 0 means perfectly aligned
     print("Lag in samples:", lag_samples)
-    # print("Please adjust the window :",lag_samples)
     ################### MODUL STO V1 Better so far ###################################
 
     ################## SYNC detection #############################
@@ -379,23 +389,3 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     ################## SYNC detection #############################
 
     return global_index_that_start_a_payload,CFO_FINAL,lag_samples,correction_factor_by_cfo_total
-
-from pathlib import Path
-import time
-import uuid
-def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
-    """
-    Saves numpy array to disk and returns the full file path.
-    """
-    PROJECT_ROOT = Path(__file__).resolve().parents[1]
-    RAW_IQ_DIR = PROJECT_ROOT / "storage" / dir
-    RAW_IQ_DIR.mkdir(parents=True, exist_ok=True)
-
-    # unique filename
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    fname = f"iq_{ts}_{uuid.uuid4().hex}.npy"
-    fpath = RAW_IQ_DIR / fname
-
-    # Save .npy (keeps dtype/shape)
-    np.save(fpath, np_lora_signal, allow_pickle=False)
-    return str(fpath)

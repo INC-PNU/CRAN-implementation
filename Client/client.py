@@ -84,7 +84,7 @@ def run_batch(
     seed=1234,
 ):
     rng = np.random.default_rng(seed)
-    results = []  # keep per-packet logs for later analysis
+    # results = []  # keep per-packet logs for later analysis
 
     for i in range(n_packets):
         opts = copy.deepcopy(base_opts)
@@ -97,18 +97,18 @@ def run_batch(
         # Run one packet
         # IMPORTANT: make send_lora_to_server return something if possible
         # e.g., {"ok": True/False, "preamble_detected": bool, "down_detected": bool}
-        out = send_lora_to_server(opts, 2)
+        out = send_lora_to_server(opts, seed)
 
-        # If your function currently returns nothing, set out=None and rely on GLOBAL_STATS.
-        results.append({
-            "i": i,
-            "CFO": opts.CFO,
-            "STO": opts.numb_offset,
-            "SNR": opts.snr,
-            "out": out,
-        })
+        # # If your function currently returns nothing, set out=None and rely on GLOBAL_STATS.
+        # results.append({
+        #     "i": i,
+        #     "CFO": opts.CFO,
+        #     "STO": opts.numb_offset,
+        #     "SNR": opts.snr,
+        #     "out": out,
+        # })
 
-    return results
+    return 0
 # base config
 opts.sf = 9
 opts.bw = 125_000
