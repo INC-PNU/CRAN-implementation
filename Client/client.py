@@ -72,25 +72,78 @@ def send_lora_to_server(opts,noise_seed):
     response = requests.post(url, json=payload)
     return response
 
-opts.sf = 9
-opts.bw = 125_000
-opts.fs = 1_000_000
-opts.n_classes = 2 ** opts.sf
-opts.CFO = 1106
-opts.numb_offset = 508
-opts.gateway_id = 1
-opts.snr = -23 #-23
-send_lora_to_server(opts,12)
 
+import copy
+
+def run_batch(
+    base_opts,
+    n_packets=100,
+    cfo_hz_range=(-2000, 2000),   # CFO in Hz (change to what makes sense)
+    sto_samp_range=(0, 500),     # STO / start offset in samples
+    snr_db_range=(-25, -5),       # SNR in dB
+    seed=1234,
+):
+    rng = np.random.default_rng(seed)
+    results = []  # keep per-packet logs for later analysis
+
+    for i in range(n_packets):
+        opts = copy.deepcopy(base_opts)
+
+        # Randomize
+        opts.CFO = float(rng.uniform(*cfo_hz_range))
+        opts.numb_offset = int(rng.integers(sto_samp_range[0], sto_samp_range[1] + 1))
+        opts.snr = int(rng.uniform(*snr_db_range))
+
+        # Run one packet
+        # IMPORTANT: make send_lora_to_server return something if possible
+        # e.g., {"ok": True/False, "preamble_detected": bool, "down_detected": bool}
+        out = send_lora_to_server(opts, 2)
+
+        # If your function currently returns nothing, set out=None and rely on GLOBAL_STATS.
+        results.append({
+            "i": i,
+            "CFO": opts.CFO,
+            "STO": opts.numb_offset,
+            "SNR": opts.snr,
+            "out": out,
+        })
+
+    return results
+# base config
 opts.sf = 9
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
-opts.CFO = 0
-opts.numb_offset = 3205
-opts.gateway_id = 2
-opts.snr = 100
-send_lora_to_server(opts,1)
+opts.gateway_id = 1
+
+# call batch
+results = run_batch(
+    base_opts=opts,
+    n_packets=300,
+    cfo_hz_range=(-5000, 5000),
+    sto_samp_range=(0, 1000),
+    snr_db_range=(-20, -20),
+    seed=42,
+)
+# opts.sf = 9
+# opts.bw = 125_000
+# opts.fs = 1_000_000
+# opts.n_classes = 2 ** opts.sf
+# opts.CFO = 0
+# opts.numb_offset = 2003
+# opts.gateway_id = 1
+# opts.snr = -10
+# send_lora_to_server(opts,-2)
+
+# opts.sf = 9
+# opts.bw = 125_000
+# opts.fs = 1_000_000
+# opts.n_classes = 2 ** opts.sf
+# opts.CFO = 930
+# opts.numb_offset = 2001
+# opts.gateway_id = 2
+# opts.snr = -17
+# send_lora_to_server(opts,2)
 
 ##Fail juga
 # opts.sf = 9

@@ -849,7 +849,8 @@ def create_spectrogram_from_torch(x,sf,bw,fs,target_row,target_col,snr,symbol,no
    
 
 def calculate_symbol_alliqfile_without_down_sampling(data,sf,bw,sample_rate,show=True):
-    plt.figure(figsize=(20,25))
+    if show:
+        plt.figure(figsize=(20,25))
     symbol_time = 2**sf / bw  # Symbol duration
     osr = int(np.floor(sample_rate/bw))
     # Time vector
@@ -920,8 +921,8 @@ def calculate_symbol_alliqfile_without_down_sampling(data,sf,bw,sample_rate,show
     return result, tags
 
 def calculate_symbol_alliqfile_with_down_sampling(data,sf,bw,sample_rate,show=True):
-
-    plt.figure(figsize=(20,25))
+    if show:
+        plt.figure(figsize=(20,25))
 
     data_downsampling = resample_poly(data, up=bw, down=sample_rate)
 
