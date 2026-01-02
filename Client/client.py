@@ -110,7 +110,7 @@ def run_batch(
 
     return 0
 # base config
-opts.sf = 9
+opts.sf = 12
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
@@ -122,7 +122,7 @@ results = run_batch(
     n_packets=300,
     cfo_hz_range=(-5000, 5000),
     sto_samp_range=(0, 1000),
-    snr_db_range=(-20, -20),
+    snr_db_range=(-27, -27),
     seed=42,
 )
 # opts.sf = 9
