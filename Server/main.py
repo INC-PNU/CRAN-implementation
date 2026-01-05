@@ -18,7 +18,7 @@ WINDOW_CAPTURES_DEADLINE_SEC = 5  # 200–500ms typical; try 2s
 ####### Initialize MONGO DATABASE ############
 GLOBAL_STATS = {
     "false": 0,
-    "total": 0,
+    "true": 0,
     "preamble_undetected": 0,
     "downchirp_undetected": 0,
 }
@@ -77,14 +77,19 @@ def upload():
     }).inserted_id
     
     ######################## TES SENSING PREAMBLE #############################
-    index_payload, cfo, sto, correction_euler = detect_cfo_sto(opts, LoRa, np_lora_signal)
-    if index_payload is None:
-        print("\nFAILED Detect LoRa Preamble or perform syncronization detection")
+    index_payload, cfo, sto = detect_cfo_sto(opts, LoRa, np_lora_signal)
+    if index_payload == -1:
+        print("\nFAILED Detect LoRa Preamble")
         GLOBAL_STATS["preamble_undetected"] += 1
         print("-----------SUMMARY----------")
         print(GLOBAL_STATS)
         return jsonify({"status": "fail"}), 400
-   
+    elif (index_payload == -2):
+        print("\nFAILED detect down chirp")
+        GLOBAL_STATS["downchirp_undetected"] += 1
+        print("-----------SUMMARY----------")
+        print(GLOBAL_STATS)
+        return jsonify({"status": "fail"}), 400
     framePerSymbol = int(opts.n_classes * (opts.fs / opts.bw))
     payload = np_lora_signal[int(index_payload * framePerSymbol) + (int(sto)):] 
     file_path2 = save_iq_to_disk(payload, dir="proc_iq_signals")
@@ -124,7 +129,7 @@ def upload():
     )
 
     ## TESTING AND VALIDATION
-    GT_ = [0,256,0,256,100,100,1,2,3,256]
+    GT_ = np.array([0,256,0,256,100,100,1,2,3,256])
     tes_signal = payload
     N = tes_signal.shape[0]
     t = np.arange(N) / fs
@@ -132,9 +137,9 @@ def upload():
     
     a = calculate_symbol_alliqfile_with_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     diff_count = np.sum(a != GT_)
-  
-    GLOBAL_STATS["false"] += diff_count
-    GLOBAL_STATS["total"] += (len(GT_) - diff_count)
+    
+    GLOBAL_STATS["false"] += int(diff_count)
+    GLOBAL_STATS["true"] += int(len(GT_) - diff_count)
    
     ##
     print("-----------SUMMARY----------")

@@ -166,7 +166,7 @@ def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
 def detect_cfo_sto(opts,LoRa,rx_samples):
 
     THRESHOLD_FOR_PREAMBLE_DETECTION = 0.625
-    factor = 1.5
+    factor = 1.4
     samplePerSymbol = opts.n_classes * (opts.fs / opts.bw)
     framePerSymbol = int(samplePerSymbol)
     lora_init = LoRa(opts.sf, opts.bw)
@@ -192,19 +192,20 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
             ## tHIS MEANS , THIS IS THE END OF BUFFER
             if (preamble_found == False):  
                 print("Preamble NOT FOUND")
-                return None,None,None,None
+                return -1,None,None
             elif (preamble_found == True):
                 print("Preamble found , but cannot find down chirp")
-                return None,None,None,None
+                return -2,None,None
         ### DECHIRPED WITH UP CHIRP    
         preamble_symbol,_ = estimate_symbol(opts,LoRa,frameBuffer)
           
         Current_symbol = np.append(Current_symbol[1:], preamble_symbol)
         have_preamble_detected = make_decision_if_preamble_exist(Current_symbol,THRESHOLD_FOR_PREAMBLE_DETECTION,framePerSymbol)
-        
         if (have_preamble_detected and (preamble_found == False)):
             #### PREAMBLE FOUND
+            
             preamble_found = True
+           
             preamble_found_index = i
                  
         if preamble_found:
@@ -388,4 +389,4 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
         global_index_that_start_a_payload -= 0
     ################## SYNC detection #############################
 
-    return global_index_that_start_a_payload,CFO_FINAL,lag_samples,correction_factor_by_cfo_total
+    return global_index_that_start_a_payload,CFO_FINAL,lag_samples

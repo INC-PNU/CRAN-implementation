@@ -868,7 +868,7 @@ def calculate_symbol_alliqfile_without_down_sampling(data,sf,bw,sample_rate,show
 
     nsamp = int(2**sf/bw*sample_rate) # 4096 ? 512 ?
     n = len(data)
-    frames = n // nsamp
+    frames = int(np.round(n / nsamp))
     num_chunks = int(np.ceil(len(data) / nsamp))
     padded_data = np.pad(data, (0, (num_chunks * nsamp) - len(data) + (1 * nsamp)), mode='constant')
     for i in range(frames):
@@ -925,7 +925,6 @@ def calculate_symbol_alliqfile_with_down_sampling(data,sf,bw,sample_rate,show=Tr
         plt.figure(figsize=(20,25))
 
     data_downsampling = resample_poly(data, up=bw, down=sample_rate)
-
     symbol_time = 2**sf / bw  # Symbol duration
     # Time vector
     t = np.arange(0, symbol_time, 1/bw)
@@ -940,7 +939,7 @@ def calculate_symbol_alliqfile_with_down_sampling(data,sf,bw,sample_rate,show=Tr
 
     nsamp = int(2**sf) # 4096 ? 512 ?
     n = len(data_downsampling)
-    frames = n // nsamp
+    frames = int(np.round(n / nsamp))
     num_chunks = int(np.ceil(len(data_downsampling) / nsamp))
     padded_data = np.pad(data_downsampling, (0, (num_chunks * nsamp) - len(data_downsampling)), mode='constant')
     for i in range(frames):
