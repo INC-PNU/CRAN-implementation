@@ -13,7 +13,7 @@ db = client.cran
 raw_db = db.raw_iq_signals
 proc_db = db.processed_iq_signals
 jobs = db.combine_jobs
-WINDOW_CAPTURES_DEADLINE_SEC = 5  # 200–500ms typical; try 2s
+WINDOW_CAPTURES_DEADLINE_SEC = 1  # 200–500ms typical; try 2s
 
 ####### Initialize MONGO DATABASE ############
 GLOBAL_STATS = {

@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 from pymongo import MongoClient
 import shutil
+from utils.my_lora_utils import *
 
 client = MongoClient("mongodb://localhost:27017")
 db = client.cran
@@ -34,7 +35,7 @@ def try_claim_job(job_id):
         {"$set": {"state": "CLAIMED", "claimed_at": now}},
     )
 
-def process_due_jobs(batch=5):
+def process_due_jobs(batch=20):
     now = time.time()
     # Find OPEN jobs past deadline
     due = list(jobs.find({"state": "OPEN", "deadline": {"$lte": now}}).limit(batch))
@@ -61,6 +62,9 @@ def process_due_jobs(batch=5):
         for c in caps:
             cfo = c["meta"]["cfo"]
             fs = c["meta"]["fs"]
+            bw = c["meta"]["bw"]
+            sf = c["meta"]["sf"]
+            
             id_ = c["_id"]
             if (temp_signal is None):
                 temp_signal = load_iq(c["location"]).astype(np.complex64, copy=False)
@@ -81,12 +85,21 @@ def process_due_jobs(batch=5):
 
                 target_len = max(len_A, len_B)
 
-                A_pad = np.pad(helper, (0, target_len - len_A), mode="constant")
-                B_pad = np.pad(temp_signal, (0, target_len - len_B), mode="constant")
+                new_signal_pad = np.pad(helper, (0, target_len - len_A), mode="constant")
+                old_signal_pad = np.pad(temp_signal, (0, target_len - len_B), mode="constant")
                 
-                temp_signal = A_pad + B_pad
+                temp_signal = new_signal_pad + old_signal_pad
+                a = calculate_symbol_alliqfile_with_down_sampling(temp_signal,sf,bw,fs,show=False)
                 
+                print("COMBINER  ???", a)
+                b = calculate_symbol_alliqfile_with_down_sampling(new_signal_pad,sf,bw,fs,show=False)
+                
+                print("NEW SIGNAL ??", b)
 
+                c = calculate_symbol_alliqfile_with_down_sampling(old_signal_pad,sf,bw,fs,show=False)
+                print("old SIGNAL ??", c)
+                print("")
+                 
         # sigs = [load_iq(c["location"]).astype(np.complex64, copy=False) for c in caps]
         # L = min(s.shape[0] for s in sigs)
         # sigs = [s[:L] for s in sigs]
@@ -99,7 +112,10 @@ def process_due_jobs(batch=5):
         # combined = align_and_combine(sigs, caps)
         combined = temp_signal.astype(np.complex64)
         out_path = OUT_DIR / f"{key}_{int(now*1000)}.npy"
-        
+        GT_ = np.array([0,256,0,256,100,100,1,2,3,256])
+        a = calculate_symbol_alliqfile_with_down_sampling(combined,sf,bw,fs,show=False)
+        diff_count = np.sum(a != GT_)
+        print(diff_count , "  ", a)
         np.save(out_path, combined, allow_pickle=False)
         # Remove directory if it exists
         if RECENT_OUT_COMBINED_DIR.exists():
