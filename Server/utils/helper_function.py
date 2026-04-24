@@ -383,11 +383,14 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
       
     symbol_sync_1,_ = estimate_symbol(opts,LoRa, dechirped_sync_1)
     symbol_sync_2,_ = estimate_symbol(opts,LoRa, dechirped_sync_2)
-  
+   
     if (symbol_sync_1 == opts.sync_sym):
         global_index_that_start_a_payload += 1
     elif (symbol_sync_2 == opts.sync_sym):
         global_index_that_start_a_payload -= 0
+    else:
+        global_index_that_start_a_payload += 1
+        # return -2,None,None
     ################## SYNC detection #############################
 
     return global_index_that_start_a_payload,CFO_FINAL,lag_samples

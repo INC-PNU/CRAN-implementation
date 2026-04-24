@@ -143,6 +143,7 @@ def upload():
     
     ######################## TES SENSING PREAMBLE #############################
     index_payload, cfo, sto = detect_cfo_sto(opts, LoRa, np_lora_signal)
+    
     if index_payload == -1:
         
         # GLOBAL_STATS["preamble_undetected"] += 1
@@ -203,7 +204,8 @@ def upload():
     corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
     #a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
-    
+    if (len(a) == 11):
+        print(a)
     diff_count = np.sum(a != GT_)
 
     # GLOBAL_STATS["false"] += int(diff_count)
