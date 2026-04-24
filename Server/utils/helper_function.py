@@ -229,11 +229,11 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
                 if (Local_Index_that_start_a_down_chirp is None):
                     continue
                 if Local_Index_that_start_a_down_chirp >= 0 and (Local_Index_that_start_a_down_chirp + 1) < len(dechirped_max):
-                    print("a")
+                    
                     # handle gracefully: return failure / adjust / log
                     if (dechirped_max[Local_Index_that_start_a_down_chirp] < dechirped_max[Local_Index_that_start_a_down_chirp + 1]):
                         Local_Index_that_start_a_down_chirp += 1  #Choose second downchirp, might have better signal
-                        print("b")
+                        
 
                 global_index_that_start_a_down_chirp = preamble_found_index + Local_Index_that_start_a_down_chirp
                 keep_going = False

@@ -206,9 +206,7 @@ def upload():
     #a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     if (len(a) == 11):
         a.pop(0)
-    elif(len(a) == 9):
-        print(a)
-        print(index_payload)
+    
     diff_count = np.sum(a != GT_)
 
     # GLOBAL_STATS["false"] += int(diff_count)
