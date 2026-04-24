@@ -49,7 +49,7 @@ def send_lora_to_server(opts,noise_seed):
 
     complete_signal_cfo = add_cfo(opts,complete_signal_,opts.CFO)
 
-    create_8_downa = create_8_down(opts,LoRa)
+    # create_8_downa = create_8_down(opts,LoRa)
 
     complete_signal_cfo_sto = complete_signal_cfo[opts.numb_offset:]
     Lora_function_init = LoRa(opts.sf, opts.bw)
