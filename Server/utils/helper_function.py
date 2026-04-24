@@ -390,7 +390,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
         global_index_that_start_a_payload -= 0
     else:
         global_index_that_start_a_payload += 1
-        # return -2,None,None
+        return -2,None,None
     ################## SYNC detection #############################
 
     return global_index_that_start_a_payload,CFO_FINAL,lag_samples
