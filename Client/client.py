@@ -146,11 +146,11 @@ opts.gateway_id = 1
 # # # call batch example
 results = run_batch(
     base_opts=opts,
-    n_packets=10000,
+    n_packets=8000,
     cfo_hz_range=(0, 0),
     sto_samp_range=(0, 0),
     snr_db_range=(-25, -5),
-    seed=64,
+    seed=-1,
 )
 
 ## Call 1 on 1 example

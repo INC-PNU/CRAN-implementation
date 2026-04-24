@@ -202,10 +202,13 @@ def upload():
     N = tes_signal.shape[0]
     t = np.arange(N) / fs
     corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
-    #a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
-    a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
+    a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
+    #a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     if (len(a) == 11):
+        a.pop(0)
+    elif(len(a) == 9):
         print(a)
+        print(index_payload)
     diff_count = np.sum(a != GT_)
 
     # GLOBAL_STATS["false"] += int(diff_count)
