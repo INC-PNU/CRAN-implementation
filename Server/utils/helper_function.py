@@ -158,7 +158,7 @@ def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
     fpath = RAW_IQ_DIR / fname
 
     # Save .npy (keeps dtype/shape)
-    np.save(fpath, np_lora_signal, allow_pickle=False)
+    # np.save(fpath, np_lora_signal, allow_pickle=False)
     return str(fpath)
 
 ## Versi 3 ##
@@ -341,11 +341,12 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     
     CFO_INT_HZ = (CFO * opts.bw) / opts.n_classes 
 
-    print(f"-----------Under Test RESULT {opts.gateway_id}----------------")
-    print("CFO HZ INT: ",CFO_INT_HZ)
-    print("CFO HZ FRAC: ",CFO_FRAC_estimation)
-    CFO_FINAL = CFO_INT_HZ + CFO_FRAC_estimation
-    print("OUR CFO ESTIMATION IS : ",CFO_FINAL)
+    # print(f"-----------Under Test RESULT {opts.gateway_id}----------------")
+    # print("CFO HZ INT: ",CFO_INT_HZ)
+    # print("CFO HZ FRAC: ",CFO_FRAC_estimation)
+    # CFO_FINAL = CFO_INT_HZ + CFO_FRAC_estimation V1
+    CFO_FINAL = CFO_INT_HZ #DEbuugging mode 
+    # print("OUR CFO ESTIMATION IS : ",CFO_FINAL)
 
     # ############### MODUL STO V2 (FAILED) #######################################
     
@@ -368,7 +369,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     corr = correlate(rx_samples_corrected_cfo, up_chirp_signal, mode="full", method="fft")
     peak_index = np.argmax(np.abs(corr))
     lag_samples = peak_index - (samplePerSymbol - 1)  # 0 means perfectly aligned
-    print("Lag in samples:", lag_samples)
+    # print("Lag in samples:", lag_samples)
     ################### MODUL STO V1 Better so far ###################################
 
     ################## SYNC detection #############################

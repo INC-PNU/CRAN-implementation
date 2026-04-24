@@ -6,41 +6,98 @@ app = Flask(__name__)
 from pymongo import MongoClient, ReturnDocument
 import time
 import hashlib
+from collections import defaultdict
+import logging
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
-####### Initialize MONGO DATABASE ############
-client = MongoClient("mongodb://localhost:27017")
-db = client.cran
-raw_db = db.raw_iq_signals
-proc_db = db.processed_iq_signals
-jobs = db.combine_jobs
+class Watchdog:
+    def __init__(self, timeout=5):
+        self.timeout = timeout
+        self.last_update = time.time()
+
+    def update(self):
+        self.last_update = time.time()
+
+    def is_timeout(self):
+        return time.time() - self.last_update > self.timeout
+    
+import threading
+ended = False
+
+def watchdog_loop():
+    global ended
+    while True:
+        
+        if wd.is_timeout() and not ended:
+            ended = True
+            print("⚠️ Timeout! No upload received.")
+            # 👉 put your action here (e.g., print stats, reset, etc.)
+            wd.update()  # optional: prevent repeated spam
+            print("-----------SUMMARY----------")
+            print(f"{'SNR':>5} | {'TRUE':>5} | {'FALSE':>5} | {'PREAMBLE':>10} | {'DOWNCHIRP':>10}")
+            print("-" * 50)
+
+            for snr in sorted(GLOBAL_STATS):
+                s = GLOBAL_STATS[snr]
+                print(f"{snr:>5} | {s['true']:>5} | {s['false']:>5} | {s['preamble_undetected']:>10} | {s['downchirp_undetected']:>10}")
+        time.sleep(1)
+
+wd = Watchdog(5)
+
+try:
+    from pymongo import MongoClient
+    MONGO_AVAILABLE = True
+except ImportError:
+    print("⚠️ pymongo is not installed. Running without database.")
+    MONGO_AVAILABLE = False
+
+if MONGO_AVAILABLE:
+    try:
+        client = MongoClient("mongodb://localhost:27017", serverSelectionTimeoutMS=2000)
+        client.server_info()  # force connection check
+
+        db = client.cran
+        raw_db = db.raw_iq_signals
+        proc_db = db.processed_iq_signals
+        jobs = db.combine_jobs
+
+        print("✅ MongoDB connected")
+
+    except Exception as e:
+        print("⚠️ MongoDB not available:", e)
+        MONGO_AVAILABLE = False
+
 WINDOW_CAPTURES_DEADLINE_SEC = 1  # 200–500ms typical; try 2s
 
-####### Initialize MONGO DATABASE ############
-GLOBAL_STATS = {
-    "false": 0,
-    "true": 0,
-    "preamble_undetected": 0,
-    "downchirp_undetected": 0,
-}
+def create_stats():
+    return {
+        "false": 0,
+        "true": 0,
+        "preamble_undetected": 0,
+        "downchirp_undetected": 0,
+    }
 
+GLOBAL_STATS = defaultdict(create_stats)
 
 @app.route('/upload', methods=['POST'])
 def upload():
+    global ended 
+    ended = False
     data = request.get_json()
     
     gateway_id = data.get("gateway_id")
     b64_lora_signal = data.get("iq_data")
     bw = data.get("bw", 125_000)  # Default value if not provided
-    sf = data.get("sf", 9)       # Default value if not provided
+    sf = data.get("sf", 7)       # Default value if not provided
     fs = data.get("fs", 1_000_000)  # Default value if not provided
     snr = data.get("snr") 
     sync_sym = data.get("sync",8)
     no_of_preamble = data.get("preamble",8)
     # Print gateway_id for debugging
-    print("\nReceived from:", gateway_id)
-    print("Received BW:", bw)
-    print("Received SF:", sf)
-    print("Received FS:", fs)
+    # print("\nReceived from:", gateway_id)
+    # print("Received BW:", bw)
+    # print("Received SF:", sf)
+    # print("Received FS:", fs)
     
     # Convert base64 IQ data to numpy array
     np_lora_signal = read_base64_convert_to_np(b64_lora_signal)
@@ -80,15 +137,15 @@ def upload():
     index_payload, cfo, sto = detect_cfo_sto(opts, LoRa, np_lora_signal)
     if index_payload == -1:
         print("\nFAILED Detect LoRa Preamble")
-        GLOBAL_STATS["preamble_undetected"] += 1
-        print("-----------SUMMARY----------")
-        print(GLOBAL_STATS)
+        # GLOBAL_STATS["preamble_undetected"] += 1
+        GLOBAL_STATS[snr]["preamble_undetected"] += 1
+       
         return jsonify({"status": "fail"}), 400
     elif (index_payload == -2):
         print("\nFAILED detect down chirp")
-        GLOBAL_STATS["downchirp_undetected"] += 1
-        print("-----------SUMMARY----------")
-        print(GLOBAL_STATS)
+        # GLOBAL_STATS["downchirp_undetected"] += 1
+        GLOBAL_STATS[snr]["downchirp_undetected"] += 1
+         
         return jsonify({"status": "fail"}), 400
     framePerSymbol = int(opts.n_classes * (opts.fs / opts.bw))
     payload = np_lora_signal[int(index_payload * framePerSymbol) + (int(sto)):] 
@@ -129,23 +186,27 @@ def upload():
     )
 
     ## TESTING AND VALIDATION
-    GT_ = np.array([0,256,0,256,100,100,1,2,3,256])
+    GT_ = np.array([0,120,0,119,100,100,1,2,3,127])   
     tes_signal = payload
     N = tes_signal.shape[0]
     t = np.arange(N) / fs
     corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
+    a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
+    #a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     
-    a = calculate_symbol_alliqfile_with_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     diff_count = np.sum(a != GT_)
-    
-    GLOBAL_STATS["false"] += int(diff_count)
-    GLOBAL_STATS["true"] += int(len(GT_) - diff_count)
+    if (diff_count != 0):
+        print(a)
+        print(GT_)
+    # GLOBAL_STATS["false"] += int(diff_count)
+    GLOBAL_STATS[snr]["false"] += int(diff_count)
+    # GLOBAL_STATS["true"] += int(len(GT_) - diff_count)
+    GLOBAL_STATS[snr]["true"] += int(len(GT_) - diff_count)
    
-    ##
-    print("-----------SUMMARY----------")
-    print(GLOBAL_STATS)
-    
+    wd.update()  # call this when event happens
+
     return jsonify({"status": "success"}), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=False) 
+    threading.Thread(target=watchdog_loop, daemon=True).start()
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=False) 

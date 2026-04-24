@@ -39,22 +39,46 @@ url = "http://127.0.0.1:5000/upload"
 def send_lora_to_server(opts,noise_seed):
 
     preamble= create_lora_preamble(opts,LoRa)
-    sequence = [0,256,0,256,100,100,1,2,3,256]
+    sequence = [0,120,0,119,100,100,1,2,3,127]
     payload = create_lora_payload(opts,LoRa,sequence)
 
-    sequence_ = [999,454]
+    sequence_ = [999,1222]
     random_ZONK = create_lora_payload(opts,LoRa,sequence_)
 
     complete_signal_ = np.concatenate([random_ZONK,preamble,payload]).astype(np.complex64)
+
     complete_signal_cfo = add_cfo(opts,complete_signal_,opts.CFO)
 
-    complete_signal_cfo_sto = complete_signal_cfo[opts.numb_offset:]
+    create_8_downa = create_8_down(opts,LoRa)
 
+    complete_signal_cfo_sto = complete_signal_cfo[opts.numb_offset:]
+    Lora_function_init = LoRa(opts.sf, opts.bw)
     if (noise_seed >= 0):
-        Lora_function_init = LoRa(opts.sf, opts.bw)
+        
         complete_signal_cfo_sto = Lora_function_init.awgn_iq_with_seed(complete_signal_cfo_sto, opts.snr, seed=noise_seed)
+    else:
+        complete_signal_cfo_sto = Lora_function_init.awgn_iq_with_seed(complete_signal_cfo_sto, opts.snr, seed=None)
     
     # complete_signal_cfo_sto = complete_signal_cfo
+    # fig, ax = plt.subplots(figsize=(14, 5), dpi=300)
+
+    # Pxx, freqs, bins, im = ax.specgram(
+    #     complete_signal_cfo_sto,
+    #     NFFT=256,
+    #     Fs=1_000_000,
+    #     noverlap=128,
+    #      cmap='RdYlBu'
+    # )
+
+    # ax.set_title("LoRa Signal Spectrogram (After CFO/STO Correction)")
+    # ax.set_xlabel("Time [s]")
+    # ax.set_ylabel("Frequency [Hz]")
+    # ax.set_ylim(-125000, 125000)
+    # plt.style.use('dark_background')
+    # plt.colorbar(im, ax=ax, label="PSD [dB]")
+    # plt.tight_layout()
+    # plt.savefig("lora_spectrogram.PNG", bbox_inches='tight')
+    # plt.show()
     
     iq_bytes = complete_signal_cfo_sto.tobytes()            # convert to bytes
     iq_b64 = base64.b64encode(iq_bytes).decode()    # encode to Base64, then encode to string
@@ -78,12 +102,15 @@ import copy
 def run_batch(
     base_opts,
     n_packets=100,
-    cfo_hz_range=(-2000, 2000),   # CFO in Hz (change to what makes sense)
-    sto_samp_range=(0, 500),     # STO / start offset in samples
+    cfo_hz_range=(0, 0),   # CFO in Hz (change to what makes sense)
+    sto_samp_range=(0, 0),     # STO / start offset in samples
     snr_db_range=(-25, -5),       # SNR in dB
     seed=1234,
 ):
-    rng = np.random.default_rng(seed)
+    if seed < 0:
+        rng = np.random.default_rng()
+    else :
+        rng = np.random.default_rng(seed)
     # results = []  # keep per-packet logs for later analysis
 
     for i in range(n_packets):
@@ -110,33 +137,33 @@ def run_batch(
 
     return 0
 # base config
-opts.sf = 9
+opts.sf = 7
 opts.bw = 125_000
 opts.fs = 1_000_000
 opts.n_classes = 2 ** opts.sf
 opts.gateway_id = 1
 
-# # call batch example
+# # # call batch example
 results = run_batch(
     base_opts=opts,
-    n_packets=100,
-    cfo_hz_range=(-5000, 5000),
-    sto_samp_range=(0, 1000),
-    snr_db_range=(-19, -19),
-    seed=2,
+    n_packets=10000,
+    cfo_hz_range=(0, 0),
+    sto_samp_range=(0, 0),
+    snr_db_range=(-25, -5),
+    seed=-1,
 )
 
 ## Call 1 on 1 example
 
 # opts.sf = 9
-# opts.bw = 125_000
-# opts.fs = 1_000_000
+# opts.bw = 125000
+# opts.fs = 1000000
 # opts.n_classes = 2 ** opts.sf
-# opts.CFO = 2178
-# opts.numb_offset = 858
+# opts.CFO = 0
+# opts.numb_offset = 0
 # opts.gateway_id = 1
-# opts.snr = -18
-# send_lora_to_server(opts,2)
+# opts.snr = -20
+# send_lora_to_server(opts,3)
 
 # opts.sf = 9
 # opts.bw = 125_000
