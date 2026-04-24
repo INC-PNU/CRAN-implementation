@@ -150,7 +150,7 @@ results = run_batch(
     cfo_hz_range=(0, 0),
     sto_samp_range=(0, 0),
     snr_db_range=(-25, -5),
-    seed=-1,
+    seed=64,
 )
 
 ## Call 1 on 1 example

@@ -191,10 +191,10 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
         if (len(frameBuffer) != len(down_chirp_signal)):
             ## tHIS MEANS , THIS IS THE END OF BUFFER
             if (preamble_found == False):  
-                print("Preamble NOT FOUND")
+                
                 return -1,None,None
             elif (preamble_found == True):
-                print("Preamble found , but cannot find down chirp")
+               
                 return -2,None,None
         ### DECHIRPED WITH UP CHIRP    
         preamble_symbol,_ = estimate_symbol(opts,LoRa,frameBuffer)

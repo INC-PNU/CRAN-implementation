@@ -7,6 +7,7 @@ from pymongo import MongoClient, ReturnDocument
 import time
 import hashlib
 from collections import defaultdict
+import threading
 import logging
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
@@ -20,9 +21,10 @@ class Watchdog:
 
     def is_timeout(self):
         return time.time() - self.last_update > self.timeout
-    
-import threading
+
+#GLOBAL   
 ended = False
+index = 0
 
 def watchdog_loop():
     global ended
@@ -82,6 +84,11 @@ GLOBAL_STATS = defaultdict(create_stats)
 @app.route('/upload', methods=['POST'])
 def upload():
     global ended 
+    global index
+
+    index = index + 1
+    if index % 50 == 0 :
+        print("Packet no: ",index)
     ended = False
     data = request.get_json()
     
@@ -119,30 +126,31 @@ def upload():
    
     key_str = f"{sf}|{bw}|{fs}|{bucket_sec}" #Create signatures
     temp_key = hashlib.sha1(key_str.encode()).hexdigest() #Create hash signatures
-    inserted_raw_db = raw_db.insert_one({
-        "gw" : gateway_id,
-        "time": unix_time,
-        "temp_key" : temp_key,
-        "meta": {
-            "sf" : opts.sf,
-            "bw" :opts.bw,
-            "fs" : opts.fs,
-            "snr" : snr
-        },
-        "size_bytes": size_bytes,
-        "location": file_path
-    }).inserted_id
+    if MONGO_AVAILABLE:
+        inserted_raw_db = raw_db.insert_one({
+            "gw" : gateway_id,
+            "time": unix_time,
+            "temp_key" : temp_key,
+            "meta": {
+                "sf" : opts.sf,
+                "bw" :opts.bw,
+                "fs" : opts.fs,
+                "snr" : snr
+            },
+            "size_bytes": size_bytes,
+            "location": file_path
+        }).inserted_id
     
     ######################## TES SENSING PREAMBLE #############################
     index_payload, cfo, sto = detect_cfo_sto(opts, LoRa, np_lora_signal)
     if index_payload == -1:
-        print("\nFAILED Detect LoRa Preamble")
+        
         # GLOBAL_STATS["preamble_undetected"] += 1
         GLOBAL_STATS[snr]["preamble_undetected"] += 1
        
         return jsonify({"status": "fail"}), 400
     elif (index_payload == -2):
-        print("\nFAILED detect down chirp")
+        
         # GLOBAL_STATS["downchirp_undetected"] += 1
         GLOBAL_STATS[snr]["downchirp_undetected"] += 1
          
@@ -152,38 +160,40 @@ def upload():
     file_path2 = save_iq_to_disk(payload, dir="proc_iq_signals")
     size_bytes2 = payload.nbytes
     unix_time2 = time.time_ns()
-    inserted_proc_db = proc_db.insert_one({
-        "gw" : gateway_id,
-        "time": unix_time2,
-        "temp_key" : temp_key,
-        "meta": {
-            "sf" : opts.sf,
-            "bw" :opts.bw,
-            "fs" : opts.fs,
-            "cfo" : cfo,
-            "sto" : sto,
-            "snr" : snr
-        },
-        "size_bytes": size_bytes2,
-        "location": file_path2
-    }).inserted_id
+    if MONGO_AVAILABLE:
+        inserted_proc_db = proc_db.insert_one({
+            "gw" : gateway_id,
+            "time": unix_time2,
+            "temp_key" : temp_key,
+            "meta": {
+                "sf" : opts.sf,
+                "bw" :opts.bw,
+                "fs" : opts.fs,
+                "cfo" : cfo,
+                "sto" : sto,
+                "snr" : snr
+            },
+            "size_bytes": size_bytes2,
+            "location": file_path2
+        }).inserted_id
     
     now = time.time()
     # 2) create/update job, but freeze deadline based on first_seen
-    job = jobs.find_one_and_update(
-        {"temp_key": temp_key},
-        {
-            "$setOnInsert": {
-                "state": "OPEN",
-                "first_seen": now,
-                "deadline": now + WINDOW_CAPTURES_DEADLINE_SEC,
+    if MONGO_AVAILABLE:
+        job = jobs.find_one_and_update(
+            {"temp_key": temp_key},
+            {
+                "$setOnInsert": {
+                    "state": "OPEN",
+                    "first_seen": now,
+                    "deadline": now + WINDOW_CAPTURES_DEADLINE_SEC,
+                },
+                "$inc": {"num_captures": 1},
+                "$set": {"updated_at": now},
             },
-            "$inc": {"num_captures": 1},
-            "$set": {"updated_at": now},
-        },
-        upsert=True,
-        return_document=ReturnDocument.AFTER
-    )
+            upsert=True,
+            return_document=ReturnDocument.AFTER
+        )
 
     ## TESTING AND VALIDATION
     GT_ = np.array([0,120,0,119,100,100,1,2,3,127])   
@@ -191,13 +201,11 @@ def upload():
     N = tes_signal.shape[0]
     t = np.arange(N) / fs
     corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
-    a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
-    #a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
+    #a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
+    a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     
     diff_count = np.sum(a != GT_)
-    if (diff_count != 0):
-        print(a)
-        print(GT_)
+
     # GLOBAL_STATS["false"] += int(diff_count)
     GLOBAL_STATS[snr]["false"] += int(diff_count)
     # GLOBAL_STATS["true"] += int(len(GT_) - diff_count)
