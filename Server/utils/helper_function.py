@@ -241,9 +241,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
         i = i + 1
   
     global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25
-    print(Local_Index_that_start_a_down_chirp)
-    print(global_index_that_start_a_down_chirp)
-    print(global_index_that_start_a_payload)
+    
     fup_chosen = global_index_that_start_a_down_chirp - 5 # -5 is fix and safe
     fdown_chosen = global_index_that_start_a_down_chirp  #
     CFO_FRAC_estimation = estimate_cfo_frac(opts,rx_samples,fdown_chosen,down_chirp_signal)
@@ -350,8 +348,8 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     # print("CFO HZ FRAC: ",CFO_FRAC_estimation)
     CFO_FINAL = CFO_INT_HZ + CFO_FRAC_estimation 
     #CFO_FINAL = 0 #DEbuugging mode 
-    print("OUR CFO frac IS : ",CFO_FRAC_estimation)
-    print("OUR CFO ESTIMATION IS : ",CFO_FINAL)
+    # print("OUR CFO frac IS : ",CFO_FRAC_estimation)
+    # print("OUR CFO ESTIMATION IS : ",CFO_FINAL)
 
     # ############### MODUL STO V2 (FAILED) #######################################
     
@@ -375,7 +373,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     corr = correlate(rx_samples_corrected_cfo, up_chirp_signal, mode="full", method="fft")
     peak_index = np.argmax(np.abs(corr))
     lag_samples = peak_index - (samplePerSymbol - 1)  # 0 means perfectly aligned
-    print("Lag in samples:", lag_samples)
+    # print("Lag in samples:", lag_samples)
     ################### MODUL STO V1 Better so far ###################################
 
     ################## SYNC detection #############################
@@ -400,5 +398,5 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     if (global_index_that_start_a_payload > 15):
         global_index_that_start_a_payload -=1
     ################## SYNC detection #############################
-    print(global_index_that_start_a_payload)
+    
     return global_index_that_start_a_payload,CFO_FINAL,lag_samples
