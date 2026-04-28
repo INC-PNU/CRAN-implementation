@@ -105,6 +105,7 @@ def upload():
     # print("Received BW:", bw)
     # print("Received SF:", sf)
     # print("Received FS:", fs)
+    print("Received SNR:", snr)
     
     # Convert base64 IQ data to numpy array
     np_lora_signal = read_base64_convert_to_np(b64_lora_signal)
@@ -201,6 +202,7 @@ def upload():
     tes_signal = payload
     N = tes_signal.shape[0]
     t = np.arange(N) / fs
+    print("seam",cfo)
     corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
     a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     #a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)

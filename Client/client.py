@@ -50,7 +50,8 @@ def send_lora_to_server(opts,noise_seed):
     complete_signal_cfo = add_cfo(opts,complete_signal_,opts.CFO)
 
     # create_8_downa = create_8_down(opts,LoRa)
-
+    print(opts.numb_offset)
+    print(opts.CFO)
     complete_signal_cfo_sto = complete_signal_cfo[opts.numb_offset:]
     Lora_function_init = LoRa(opts.sf, opts.bw)
     if (noise_seed >= 0):
@@ -146,11 +147,11 @@ opts.gateway_id = 1
 # # # call batch example
 results = run_batch(
     base_opts=opts,
-    n_packets=8000,
-    cfo_hz_range=(0, 0),
+    n_packets=100,
+    cfo_hz_range=(-400, 2000),
     sto_samp_range=(0, 0),
     snr_db_range=(-25, -5),
-    seed=-1,
+    seed=69,
 )
 
 ## Call 1 on 1 example
