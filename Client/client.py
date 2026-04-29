@@ -90,7 +90,9 @@ def send_lora_to_server(opts,noise_seed):
         "bw" : opts.bw,  # Default value if not provided
         "sf" : opts.sf,      # Default value if not provided
         "fs" : opts.fs,
-        "snr" : opts.snr
+        "snr" : opts.snr,
+        "offset" : opts.numb_offset,
+        "cfo" : opts.CFO
     }
 
     response = requests.post(url, json=payload)
@@ -101,10 +103,10 @@ import copy
 
 def run_batch(
     base_opts,
-    n_packets=100,
+    n_packets=10,
     cfo_hz_range=(0, 0),   # CFO in Hz (change to what makes sense)
     sto_samp_range=(0, 0),     # STO / start offset in samples
-    snr_db_range=(-25, -5),       # SNR in dB
+    snr_db_range=(-15, 10),       # SNR in dB
     seed=1234,
 ):
     if seed < 0:
@@ -146,11 +148,11 @@ opts.gateway_id = 1
 # # # call batch example
 results = run_batch(
     base_opts=opts,
-    n_packets=500,
+    n_packets=3000,
     cfo_hz_range=(0, 0),
     sto_samp_range=(0, 0),
     snr_db_range=(-25, -5),
-    seed=69,
+    seed=-11, #11 no pm undetc
 )
 
 ## Call 1 on 1 example

@@ -36,12 +36,22 @@ def watchdog_loop():
             # 👉 put your action here (e.g., print stats, reset, etc.)
             wd.update()  # optional: prevent repeated spam
             print("-----------SUMMARY----------")
-            print(f"{'SNR':>5} | {'TRUE':>5} | {'FALSE':>5} | {'PREAMBLE':>10} | {'DOWNCHIRP':>10}")
-            print("-" * 50)
+            print(f"{'SNR':>5} | {'TRUE':>5} | {'F':>3} | {'ACC':>8} | {'PREAM':>6} | {'DOWN':>6} | {'ACC_T':>7}")
+            print("-" * 58)
 
             for snr in sorted(GLOBAL_STATS):
                 s = GLOBAL_STATS[snr]
-                print(f"{snr:>5} | {s['true']:>5} | {s['false']:>5} | {s['preamble_undetected']:>10} | {s['downchirp_undetected']:>10}")
+                true_ = s['true']
+                false_ = s['false']
+                prem = s['preamble_undetected']
+                down = s['downchirp_undetected']
+                if (true_ == 0 and false_ == 0):
+                    acc = 0
+                else:
+                    acc = true_ * 100 / (true_ + false_)
+                tot = true_ + false_ + (prem * 10) + (down * 10)
+                acc_total = true_* 100 / (tot)
+                print(f"{snr:>5} | {s['true']:>5} | {s['false']:>3} | {acc:>7.2f}% | {prem:>6} | {down:>6} | {acc_total:>6.2f}%")
         time.sleep(1)
 
 wd = Watchdog(5)
@@ -70,6 +80,7 @@ if MONGO_AVAILABLE:
         MONGO_AVAILABLE = False
 
 WINDOW_CAPTURES_DEADLINE_SEC = 1  # 200–500ms typical; try 2s
+MONGO_AVAILABLE = False #Not using mongo dB
 
 def create_stats():
     return {
@@ -105,7 +116,9 @@ def upload():
     # print("Received BW:", bw)
     # print("Received SF:", sf)
     # print("Received FS:", fs)
-   
+    # print("Received CFO:", data.get("cfo") )
+    # print("Received Offset:", data.get("offset") )
+    # print("Received SNR:", snr )
     
     # Convert base64 IQ data to numpy array
     np_lora_signal = read_base64_convert_to_np(b64_lora_signal)
@@ -205,6 +218,7 @@ def upload():
     
     corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
     a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
+    
     #a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     if (len(a) == 11):
         a.pop(0)

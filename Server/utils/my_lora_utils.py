@@ -889,6 +889,7 @@ def calculate_symbol_alliqfile_without_down_sampling(data,sf,bw,sample_rate,show
         # EXPERIMENTAL 3
         spectrum = np.fft.fftshift(np.fft.fft(de_))
         power = np.abs(spectrum) ** 2
+           
         fft_len = len(power)
         center = fft_len // 2
         bins = 2 ** sf 

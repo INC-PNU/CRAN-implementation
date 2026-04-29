@@ -191,15 +191,16 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
         if (len(frameBuffer) != len(down_chirp_signal)):
             ## tHIS MEANS , THIS IS THE END OF BUFFER
             if (preamble_found == False):  
-                
+                # print("PREM NOT FOUND")
                 return -1,None,None
             elif (preamble_found == True):
-               
+                # print("-------DOWN CHIR{P not found}")
                 return -2,None,None
         ### DECHIRPED WITH UP CHIRP    
         preamble_symbol,_ = estimate_symbol(opts,LoRa,frameBuffer)
           
         Current_symbol = np.append(Current_symbol[1:], preamble_symbol)
+        
         have_preamble_detected = make_decision_if_preamble_exist(Current_symbol,THRESHOLD_FOR_PREAMBLE_DETECTION,framePerSymbol)
         if (have_preamble_detected and (preamble_found == False)):
             #### PREAMBLE FOUND
@@ -222,10 +223,11 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
             ######### TESTING DELETE SOON#######
             
             if (len(dechirped_max)) >= 8:          
-                mean_val = np.mean(dechirped_max)        
+                mean_val = np.mean(dechirped_max) 
+                       
                 indices = np.where(dechirped_max > (mean_val * factor))[0] # Find first index where value > mean*factor
                 Local_Index_that_start_a_down_chirp = indices[0] if len(indices) > 0 else None
-                
+              
                 if (Local_Index_that_start_a_down_chirp is None):
                     continue
                 if Local_Index_that_start_a_down_chirp >= 0 and (Local_Index_that_start_a_down_chirp + 1) < len(dechirped_max):
@@ -248,8 +250,11 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
    
     correction_factor_by_cfo_frac = np.exp(-1j * 2 * np.pi * (CFO_FRAC_estimation)* t)
     
-    dechirped_up = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac * down_chirp_signal 
-    dechirped_down = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac * up_chirp_signal
+    #dechirped_up = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac * down_chirp_signal  #VERSI 1.1
+    dechirped_up = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * down_chirp_signal  #VERSI 1.2
+    
+    #dechirped_down = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac * up_chirp_signal #VERSI 1.1
+    dechirped_down = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * up_chirp_signal #VERSI 1.2
 
     #########################################################
     psd_up = np.abs(np.fft.fftshift(np.fft.fft(dechirped_up)))  
@@ -368,8 +373,10 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
 
     ################### MODUL STO V1 Better so far ###################################
     cfo_test_boleh_delete_soon = CFO_FINAL
+    # print("CFO FIn al:",CFO_FINAL)
     correction_factor_by_cfo_total = np.exp(-1j * 2 * np.pi * ( cfo_test_boleh_delete_soon)* t)
     rx_samples_corrected_cfo =  rx_samples[(fup_chosen-1)*framePerSymbol:(fup_chosen-1)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_total
+    rx_samples_corrected_cfo =  rx_samples[(fup_chosen-2)*framePerSymbol:(fup_chosen-2)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_total
     corr = correlate(rx_samples_corrected_cfo, up_chirp_signal, mode="full", method="fft")
     peak_index = np.argmax(np.abs(corr))
     lag_samples = peak_index - (samplePerSymbol - 1)  # 0 means perfectly aligned

@@ -70,4 +70,26 @@ class LoRa:
             overSamp = int(Fs / org_Fs)
             symb = symb[:, ::overSamp]
 
-        return symb[0]       
+        return symb[0]     
+      
+    def generate_lora_chirp(self, code_word, down=False, Fs=None):
+        """ Generate a LoRa upchirp for a given symbol index, ensuring frequency wraps around. """
+        sf = self.sf
+        bw = self.bw
+        samplePerDfreq = Fs/ bw
+        num_symbols = 2**sf # Total possible symbols
+        symbol_freq_shift = code_word * samplePerDfreq  # Frequency shift for symbol
+        symbol_time = 2**sf / bw  # Symbol duration
+        t = np.arange(0, symbol_time, 1/Fs)
+        f0 = -bw/2
+        f1 = bw/2
+        final = []
+        for index, row in enumerate(t):
+            real_index = int(np.round(index + symbol_freq_shift))
+        
+            real_index = int(real_index % int(np.floor(( num_symbols* samplePerDfreq))))      
+            final.append(np.exp(1j * 2 * np.pi * ((f0) * t[real_index] + (f1 / (symbol_time)) * t[real_index]**2)))
+        # Generate chirp signal for the symbol
+        return np.array(final, dtype=np.complex64)
+        #return np.exp(1j * 2 * np.pi * ((f0 + symbol_freq_shift) * t + (bw / (2 * symbol_time)) * t**2))
+    
