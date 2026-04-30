@@ -805,7 +805,6 @@ def create_spectrogram_from_torch(x,sf,bw,fs,target_row,target_col,snr,symbol,no
     
     nfft = int(target_row * (fs/bw))#512
 
-    print("TES")
     if (center) :
         noverlap = (input_signal_length//(target_col -1))
         
@@ -818,9 +817,7 @@ def create_spectrogram_from_torch(x,sf,bw,fs,target_row,target_col,snr,symbol,no
         x = torch.from_numpy(x)
 
     # Ensure dtype is float32
-    print(nfft)
-    print(noverlap)
-    print(nperseg)
+  
     Z = torch.stft(
         x, 
         n_fft=nfft,
@@ -837,7 +834,7 @@ def create_spectrogram_from_torch(x,sf,bw,fs,target_row,target_col,snr,symbol,no
     ##crop
 
     out = spec_to_network_input(Z_torch,target_row)
-    print(out.shape)
+    
     real_part = out[0][0]
     ima_part = out[0][1]
     magnitude = torch.abs(real_part + ima_part * 1j)
@@ -1129,11 +1126,14 @@ def calculate_symbol_alliqfile_cropping_technique(data,sf,bw,sample_rate,show=Tr
     frames = int(np.round(n / nsamp))
     num_chunks = int(np.ceil(len(data) / nsamp))
     padded_data = np.pad(data, (0, (num_chunks * nsamp) - len(data) + (1 * nsamp)), mode='constant')
-
-    stft_nfft = n_classes  * (sample_rate // bw)
-    istft_nfft = stft_nfft // (sample_rate // bw)
-    stft_window = n_classes // 2
-    istft_window = stft_window * 2 // (sample_rate // bw) 
+    
+    
+    dividor = 16 // (sample_rate // bw)
+   
+    stft_nfft = n_classes  * (sample_rate // bw) #good
+    istft_nfft = stft_nfft // (sample_rate // bw) #Good
+    stft_window = n_classes // dividor
+    istft_window = stft_window // (sample_rate // bw) 
     stft_overlap = stft_window // 2
     istft_overlap = stft_overlap // (sample_rate // bw)
     for i in range(frames):
@@ -1143,37 +1143,54 @@ def calculate_symbol_alliqfile_cropping_technique(data,sf,bw,sample_rate,show=Tr
         an_data = padded_data[start_idx*nsamp + bias :end_idx*nsamp + bias]
         an_data = torch.from_numpy(an_data)
         an_data = an_data.unsqueeze(0)
-       
-        #STEP 1 .. STFT
-        window = torch.hann_window(stft_window).to(an_data.device)
-        images_X_spectrum_raw = torch.stft(input=an_data, n_fft=stft_nfft, hop_length=stft_overlap, window=window,
-                                           win_length=stft_window, pad_mode='constant')
-       
-
-        #### STEP 2 . CROP
-
-        images_X_spectrum = spec_to_network_input(images_X_spectrum_raw, n_classes)
         
-        #### STEP 3 ISFT
-        first_X_time = inverse_stft(images_X_spectrum,istft_nfft,istft_window,istft_overlap)
+        if (bw == sample_rate):
+           
+            t = np.arange(0, symbol_time, 1/bw) ##bw need = fs
+            f0 = -bw/2 # Start frequency
+            f1 = bw/2 # End frequency
+            up_chirp_signal = np.exp(1j * 2 * np.pi * (f0 * t + (f1 / ( symbol_time)) * t**2))
+            down_chirp_signal = np.conj(up_chirp_signal)
+            dechirped = an_data * down_chirp_signal
+            
+            spectrum =  np.fft.fft(dechirped)
 
-        ### STEP 4 FFT ARG MAX (DECHIRPING)
-        if not isinstance(first_X_time, np.ndarray):
-            first_X_time = first_X_time.detach().cpu().numpy()
+            power = np.abs(spectrum)
+            max_index = np.argmax(power)
+            result.append(max_index)
+        else:
+            #STEP 1 .. STFT
+            window = torch.hann_window(stft_window).to(an_data.device)
+            images_X_spectrum_raw = torch.stft(input=an_data, n_fft=stft_nfft, hop_length=stft_overlap, window=window,
+                                            win_length=stft_window, pad_mode='constant')
+            
 
-        t = np.arange(0, symbol_time, 1/bw) ##bw need = fs
-        f0 = -bw/2 # Start frequency
-        f1 = bw/2 # End frequency
+            #### STEP 2 . CROP
+            images_X_spectrum = spec_to_network_input(images_X_spectrum_raw, n_classes)
+            
+            
+            #### STEP 3 ISFT
+            first_X_time = inverse_stft(images_X_spectrum,istft_nfft,istft_window,istft_overlap)
+            
+            
+            ### STEP 4 FFT ARG MAX (DECHIRPING)
+            if not isinstance(first_X_time, np.ndarray):
+                first_X_time = first_X_time.detach().cpu().numpy()
 
-        up_chirp_signal = np.exp(1j * 2 * np.pi * (f0 * t + (f1 / ( symbol_time)) * t**2))
-        down_chirp_signal = np.conj(up_chirp_signal)
-        dechirped = first_X_time  * down_chirp_signal
-        spectrum =  np.fft.fft(dechirped)
+            t = np.arange(0, symbol_time, 1/bw) ##bw need = fs
+            f0 = -bw/2 # Start frequency
+            f1 = bw/2 # End frequency
 
-        power = np.abs(spectrum)
-        max_index = np.argmax(power)
-        ## END EXPERIMENTAL
-        result.append(max_index)
+            up_chirp_signal = np.exp(1j * 2 * np.pi * (f0 * t + (f1 / ( symbol_time)) * t**2))
+            down_chirp_signal = np.conj(up_chirp_signal)
+            dechirped = first_X_time  * down_chirp_signal
+            
+            spectrum =  np.fft.fft(dechirped)
+
+            power = np.abs(spectrum)
+            max_index = np.argmax(power)
+            ## END EXPERIMENTAL
+            result.append(max_index)
 
 
     return result

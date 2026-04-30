@@ -52,21 +52,28 @@ def estimate_symbol(opts,lora,signal):
         int — estimated symbol index (0 to 2^sf - 1)
     """
     lora_init = lora(opts.sf, opts.bw)
+    Debug = lora_init.gen_symbol_fs(8, down=False, Fs=opts.fs)
     down_chirp_signal = lora_init.gen_symbol_fs(0, down=True, Fs=opts.fs)
     
     if len(signal) != len(down_chirp_signal):
         raise ValueError("Length mismatch between IQ and downchirp")
 
     # 1. Dechirp: multiply with conjugate downchirp
-    dechirped = signal * down_chirp_signal
-  
+    dechirped = Debug * down_chirp_signal
+    
     # # Step 2: Optional windowing to reduce sidelobes
     # windowed = dechirped * windows.hamming(len(dechirped))
 
     # Step 3: FFT
-    spectrum = np.fft.fftshift(np.fft.fft(dechirped))
+    if (opts.bw == opts.fs):
+        spectrum = np.fft.fft(dechirped)
+    else:
+        spectrum = np.fft.fftshift(np.fft.fft(dechirped))
     power = np.abs(spectrum) ** 2
     max_index = np.argmax(power)
+    
+    if (opts.bw == opts.fs):
+        return max_index,max_index
     
     # Step 4: Extract only the middle 512 bins (LoRa bandwidth region)
     fft_len = len(power)
@@ -194,7 +201,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
                 # print("PREM NOT FOUND")
                 return -1,None,None
             elif (preamble_found == True):
-                # print("-------DOWN CHIR{P not found}")
+                print("-------DOWN CHIR{P not found}")
                 return -2,None,None
         ### DECHIRPED WITH UP CHIRP    
         preamble_symbol,_ = estimate_symbol(opts,LoRa,frameBuffer)
@@ -258,16 +265,20 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
 
     #########################################################
     psd_up = np.abs(np.fft.fftshift(np.fft.fft(dechirped_up)))  
-   
-    fft_len = len(psd_up)
-    center = fft_len // 2
-    bins = opts.n_classes
-    upper_freq = psd_up[center : center + bins ]
-    lower_freq = psd_up[center - bins: center]
-    combine = upper_freq + lower_freq
+    if (opts.bw == opts.fs):
+        combine = psd_up
+        choose_index = np.argmax(psd_up)
+    else:
 
-    #I WANT TO TRY FIND STO FRACTIONAL #
-    choose_index = np.argmax(combine)
+        fft_len = len(psd_up)
+        center = fft_len // 2
+        bins = opts.n_classes
+        upper_freq = psd_up[center : center + bins ]
+        lower_freq = psd_up[center - bins: center]
+        combine = upper_freq + lower_freq
+
+        #I WANT TO TRY FIND STO FRACTIONAL #
+        choose_index = np.argmax(combine)
     next_index = (choose_index + 1) % opts.n_classes
     prev_index = (choose_index - 1 + opts.n_classes) % opts.n_classes
     prev_value = combine[prev_index]
@@ -301,43 +312,48 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
         shift_sto_index = np.round(shift_sto_index * over_sample) 
         # print(shift_sto_index)
       
-    symbol_up = np.argmax(combine)
+    # symbol_up = np.argmax(combine)
+    symbol_up = choose_index
    
     psd_down = np.abs(np.fft.fftshift(np.fft.fft(dechirped_down)))
+    if (opts.bw == opts.fs):
+        combine = psd_down
+        choose_index = np.argmax(psd_down)
+    else:
 
-    fft_len = len(psd_down)
-    center = fft_len // 2
-    bins = opts.n_classes
-    upper_freq = psd_down[center : center + bins ]
-    lower_freq = psd_down[center - bins: center]
-    combine = upper_freq + lower_freq
+        fft_len = len(psd_down)
+        center = fft_len // 2
+        bins = opts.n_classes
+        upper_freq = psd_down[center : center + bins ]
+        lower_freq = psd_down[center - bins: center]
+        combine = upper_freq + lower_freq
 
-    choose_index = np.argmax(combine)
-   
+        choose_index = np.argmax(combine)
+    
     next_index = (choose_index + 1) % opts.n_classes
     prev_index = (choose_index - 1 + opts.n_classes) % opts.n_classes
   
     prev_value = combine[prev_index]
     next_value = combine[next_index]
-
-    def timing_error_nonlinear(TE_raw, A=4.0, B=2.5): #REVISE SOON
-        return A * np.tanh(B * TE_raw)
+  
+    # def timing_error_nonlinear(TE_raw, A=4.0, B=2.5): #REVISE SOON
+    #     return A * np.tanh(B * TE_raw)
     
     if (next_value > prev_value):      
-        diff = next_value - prev_value
-        TE_raw = diff/combine[choose_index]
+        # diff = next_value - prev_value
+        # TE_raw = diff/combine[choose_index]
         type_type = 1
-        sto_offset = timing_error_nonlinear(TE_raw)
+        # sto_offset = timing_error_nonlinear(TE_raw)
         
     else:
-        diff = prev_value - next_value
-        TE_raw = diff/combine[choose_index]
+        # diff = prev_value - next_value
+        # TE_raw = diff/combine[choose_index]
         type_type = 2
-        sto_offset = timing_error_nonlinear(TE_raw)
+        # sto_offset = timing_error_nonlinear(TE_raw)
       
     # Step 5: Find peak (max bin)
-    symbol_down = np.argmax(combine)
-  
+    # symbol_down = np.argmax(combine)
+    symbol_down = choose_index
     CFO = (symbol_up + symbol_down)/2  
     CFO = to_nearest_N_center(CFO,opts.n_classes) ## Only can recover a CFO limited to the range [􀀀BW=4;BW=4].
     
@@ -387,14 +403,16 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     # Find the exact index that match the Sync Symbol
     # That index will be reference index to know when to start a payload
     i_down = int(global_index_that_start_a_down_chirp) - 1 #1
+    # print("down",global_index_that_start_a_down_chirp)
     i_down_2 = i_down - 1
     sto = int(lag_samples)
+   
     dechirped_sync_1 = rx_samples[(i_down)*framePerSymbol + sto:(i_down)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total
     dechirped_sync_2 = rx_samples[(i_down_2)*framePerSymbol + sto:(i_down_2)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total 
       
     symbol_sync_1,_ = estimate_symbol(opts,LoRa, dechirped_sync_1)
     symbol_sync_2,_ = estimate_symbol(opts,LoRa, dechirped_sync_2)
-
+  
     if (symbol_sync_1 == opts.sync_sym):
         global_index_that_start_a_payload += 1
     elif (symbol_sync_2 == opts.sync_sym):

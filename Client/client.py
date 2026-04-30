@@ -141,17 +141,17 @@ def run_batch(
 # base config
 opts.sf = 7
 opts.bw = 125_000
-opts.fs = 1_000_000
+opts.fs = 1000000
 opts.n_classes = 2 ** opts.sf
 opts.gateway_id = 1
 
 # # # call batch example
 results = run_batch(
     base_opts=opts,
-    n_packets=3000,
+    n_packets=5000,
     cfo_hz_range=(0, 0),
     sto_samp_range=(0, 0),
-    snr_db_range=(-25, -5),
+    snr_db_range=(-36, -10),
     seed=-11, #11 no pm undetc
 )
 
