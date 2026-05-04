@@ -151,7 +151,7 @@ results = run_batch(
     n_packets=5000,
     cfo_hz_range=(0, 0),
     sto_samp_range=(0, 0),
-    snr_db_range=(-36, -10),
+    snr_db_range=(-25, -5),
     seed=-11, #11 no pm undetc
 )
 

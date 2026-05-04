@@ -52,14 +52,13 @@ def estimate_symbol(opts,lora,signal):
         int — estimated symbol index (0 to 2^sf - 1)
     """
     lora_init = lora(opts.sf, opts.bw)
-    Debug = lora_init.gen_symbol_fs(8, down=False, Fs=opts.fs)
     down_chirp_signal = lora_init.gen_symbol_fs(0, down=True, Fs=opts.fs)
     
     if len(signal) != len(down_chirp_signal):
         raise ValueError("Length mismatch between IQ and downchirp")
 
     # 1. Dechirp: multiply with conjugate downchirp
-    dechirped = Debug * down_chirp_signal
+    dechirped = signal * down_chirp_signal
     
     # # Step 2: Optional windowing to reduce sidelobes
     # windowed = dechirped * windows.hamming(len(dechirped))
@@ -114,6 +113,8 @@ def estimate_cfo_frac(
     framePerSymbol = int(samplePerSymbol)
     first_index = i - 2 - (opts.no_of_preamble)
     z_sum = 0
+    if (first_index < 0):
+        first_index = 0
     for x in range(first_index, i-5):
         dechirped_1 = s[(x)*framePerSymbol:(x)*framePerSymbol + framePerSymbol] * down
         dechirped_2 = s[(x+1)*framePerSymbol:(x+1)*framePerSymbol + framePerSymbol] * down
@@ -163,7 +164,7 @@ def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
     ts = time.strftime("%Y%m%d_%H%M%S")
     fname = f"iq_{ts}_{uuid.uuid4().hex}.npy"
     fpath = RAW_IQ_DIR / fname
-
+    
     # Save .npy (keeps dtype/shape)
     # np.save(fpath, np_lora_signal, allow_pickle=False)
     return str(fpath)
@@ -191,21 +192,21 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     Current_symbol = [-1,-2,-3,-4,-5,-6,-7,-8]
     keep_going = True
     preamble_found = False
+
     while (total_buffer < len(rx_samples) and keep_going):
         frameBuffer = rx_samples[total_buffer:(total_buffer + framePerSymbol)]
         total_buffer = total_buffer + framePerSymbol
-        
-        if (len(frameBuffer) != len(down_chirp_signal)):
+        if (len(frameBuffer) != len(down_chirp_signal) or total_buffer == len(rx_samples)):
             ## tHIS MEANS , THIS IS THE END OF BUFFER
+            
             if (preamble_found == False):  
                 # print("PREM NOT FOUND")
                 return -1,None,None
             elif (preamble_found == True):
-                print("-------DOWN CHIR{P not found}")
                 return -2,None,None
         ### DECHIRPED WITH UP CHIRP    
         preamble_symbol,_ = estimate_symbol(opts,LoRa,frameBuffer)
-          
+      
         Current_symbol = np.append(Current_symbol[1:], preamble_symbol)
         
         have_preamble_detected = make_decision_if_preamble_exist(Current_symbol,THRESHOLD_FOR_PREAMBLE_DETECTION,framePerSymbol)
@@ -217,6 +218,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
             preamble_found_index = i
                  
         if preamble_found:
+           
             # correction_factor_by_cfo_frac = np.exp(-1j * 2 * np.pi * t)
             dechirp_down = frameBuffer * up_chirp_signal
             maxAmplitude = np.max(np.abs(np.fft.fft(dechirp_down)))
@@ -245,10 +247,13 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
                         
 
                 global_index_that_start_a_down_chirp = preamble_found_index + Local_Index_that_start_a_down_chirp
+
                 keep_going = False
               
         i = i + 1
-  
+    
+    if (global_index_that_start_a_down_chirp < 10):
+        return -2,None,None
     global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25
     
     fup_chosen = global_index_that_start_a_down_chirp - 5 # -5 is fix and safe

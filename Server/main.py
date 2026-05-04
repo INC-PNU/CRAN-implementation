@@ -218,12 +218,18 @@ def upload():
     
     corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
     a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
-    
     #a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     if (len(a) == 11):
         a.pop(0)
-    
-    diff_count = np.sum(a != GT_)
+        diff_count = np.sum(a != GT_)
+    elif (len(a) == 9):            
+        GT_ = np.delete(GT_, 0)     # remove it
+        diff_count = np.sum(a != GT_)
+    elif (len(a) == len(GT_)):
+        diff_count = np.sum(a != GT_)
+    else:
+        GLOBAL_STATS[snr]["downchirp_undetected"] += 1       
+        return jsonify({"status": "fail"}), 400
 
     # GLOBAL_STATS["false"] += int(diff_count)
     GLOBAL_STATS[snr]["false"] += int(diff_count)
