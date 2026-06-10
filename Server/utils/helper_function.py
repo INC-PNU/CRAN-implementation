@@ -58,6 +58,7 @@ def estimate_symbol(opts,lora,signal):
         raise ValueError("Length mismatch between IQ and downchirp")
 
     # 1. Dechirp: multiply with conjugate downchirp
+    
     dechirped = signal * down_chirp_signal
     
     # # Step 2: Optional windowing to reduce sidelobes
@@ -417,11 +418,16 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
       
     symbol_sync_1,_ = estimate_symbol(opts,LoRa, dechirped_sync_1)
     symbol_sync_2,_ = estimate_symbol(opts,LoRa, dechirped_sync_2)
-  
-    if (symbol_sync_1 == opts.sync_sym):
+    
+    if (symbol_sync_1 == opts.sync_sym[1]):
+        
         global_index_that_start_a_payload += 1
-    elif (symbol_sync_2 == opts.sync_sym):
+    elif (symbol_sync_1 == opts.sync_sym[0]):
         global_index_that_start_a_payload -= 0
+    elif (symbol_sync_2 == opts.sync_sym[1]):
+        global_index_that_start_a_payload -= 0
+    elif (symbol_sync_2 == opts.sync_sym[0]):
+        global_index_that_start_a_payload += 1
     else:
         global_index_that_start_a_payload += 1
         return -2,None,None

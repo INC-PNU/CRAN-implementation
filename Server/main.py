@@ -109,7 +109,7 @@ def upload():
     sf = data.get("sf", 7)       # Default value if not provided
     fs = data.get("fs", 1_000_000)  # Default value if not provided
     snr = data.get("snr") 
-    sync_sym = data.get("sync",8)
+    sync_sym = data.get("sync",[8,8])
     no_of_preamble = data.get("preamble",8)
     # Print gateway_id for debugging
     # print("\nReceived from:", gateway_id)
