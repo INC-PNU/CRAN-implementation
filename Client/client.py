@@ -103,11 +103,11 @@ import copy
 
 def run_batch(
     base_opts,
-    n_packets=10,
+    n_packets=1000,
     cfo_hz_range=(0, 0),   # CFO in Hz (change to what makes sense)
     sto_samp_range=(0, 0),     # STO / start offset in samples
-    snr_db_range=(-15, 10),       # SNR in dB
-    seed=1234,
+    snr_db_range=(-25, -5),       # SNR in dB
+    seed=-11,
 ):
     if seed < 0:
         rng = np.random.default_rng()
@@ -148,7 +148,7 @@ opts.gateway_id = 1
 # # # call batch example
 results = run_batch(
     base_opts=opts,
-    n_packets=5000,
+    n_packets=1000,
     cfo_hz_range=(0, 0),
     sto_samp_range=(0, 0),
     snr_db_range=(-25, -5),
