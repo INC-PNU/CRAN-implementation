@@ -99,11 +99,12 @@ opts.n_classes  = 2 ** opts.sf
 opts.gateway_id = 1
 
 # ── Run batch test ─────────────────────────────────────────────────────────────
+#note STO cannot be negative
 results = run_batch(
     base_opts=opts,
     n_packets=1000,
-    cfo_hz_range=(0, 0),
-    sto_samp_range=(0, 0),
-    snr_db_range=(-25, 10),
-    seed=-11,
+    cfo_hz_range=(-3000, 3000),
+    sto_samp_range=(0, 1000),
+    snr_db_range=(-20, -10),
+    seed=-12,
 )

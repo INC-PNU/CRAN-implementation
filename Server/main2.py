@@ -226,7 +226,8 @@ def plot_debug_spectrogram(
     """
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), dpi=150)
     plt.style.use('dark_background')
-
+    print(iq_signal.shape)
+    print(spec_tensor.shape)
     # 1. Raw IQ Signal Spectrogram
     Pxx, freqs, bins, im1 = ax1.specgram(
         iq_signal,
@@ -403,7 +404,10 @@ def upload_calora():
     snr             = data.get("snr")
     no_of_preamble  = data.get("preamble", 8)
     offset          = data.get("offset",  0)
-
+    cfo = data.get("cfo",0)
+    print("cfo :", cfo, " offset : ", offset, " SNR : ", snr)
+    offset_in_spec = round(offset/1024 * 33)
+    print(offset_in_spec)
     # ── Decode IQ ───────────────────────────────────────────────────────────
     np_lora_signal = read_base64_convert_to_np(b64_lora_signal)
 
@@ -423,18 +427,16 @@ def upload_calora():
     
     win_len = opts.n_classes // 2
     hop     = win_len // 2
-    true_start_col = true_start_samples // hop# true_start_samples // hop
+    true_start_col = (true_start_samples // hop) - offset_in_spec # true_start_samples // hop
     
     # ── CALoRa preamble detection ────────────────────────────────────────────
     spec_tensor = iq_to_network_input(np_lora_signal, opts.sf, opts.bw, opts.fs)
     is_detected, t_start, t_end, mean_prob = detect_preamble_calora(opts, np_lora_signal)
     print(is_detected)
     print(t_start)
-    print(t_end)
-    print(mean_prob)
     
     # Save a debugging plot for packet #1
-    if snr == -19:
+    if index == 10 or index == 3:
        
         plot_debug_spectrogram(
             iq_signal=np_lora_signal,
@@ -445,7 +447,7 @@ def upload_calora():
             true_start_col=true_start_col,
             mean_prob=mean_prob,
             snr=snr,
-            save_path= "debug_calora_spectrogram" + str(index) + str(mean_prob) + ".png"
+            save_path= "debug_calora_spectrogram" + str(index) + " " + str(mean_prob) + ".png"
         )
     
     bool_pred  = mean_prob > CALORA_THRESH
