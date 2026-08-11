@@ -202,9 +202,9 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
             
             if (preamble_found == False):  
                 # print("PREM NOT FOUND")
-                return -1,None,None
+                return -1,None,None,preamble_found
             elif (preamble_found == True):
-                return -2,None,None
+                return -2,None,None,preamble_found
         ### DECHIRPED WITH UP CHIRP    
         preamble_symbol,_ = estimate_symbol(opts,LoRa,frameBuffer)
       
@@ -254,7 +254,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
         i = i + 1
     
     if (global_index_that_start_a_down_chirp < 10):
-        return -2,None,None
+        return -2,None,None,preamble_found
     global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25
     
     fup_chosen = global_index_that_start_a_down_chirp - 5 # -5 is fix and safe
@@ -361,7 +361,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     # symbol_down = np.argmax(combine)
     symbol_down = choose_index
     CFO = (symbol_up + symbol_down)/2  
-    CFO = to_nearest_N_center(CFO,opts.n_classes) ## Only can recover a CFO limited to the range [􀀀BW=4;BW=4].
+    CFO = to_nearest_N_center(CFO,opts.n_classes) ## Only can recover a CFO limited to the range [-BW=4;BW=4].
     
     if(type_type == 1):
         CFO = round_left_left_zero(CFO) # If positif, round to upper, if negative round to lower
@@ -430,9 +430,9 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
         global_index_that_start_a_payload += 1
     else:
         global_index_that_start_a_payload += 1
-        return -2,None,None
+        return -2,None,None,preamble_found
     if (global_index_that_start_a_payload > 15):
         global_index_that_start_a_payload -=1
     ################## SYNC detection #############################
     
-    return global_index_that_start_a_payload,CFO_FINAL,lag_samples
+    return global_index_that_start_a_payload,CFO_FINAL,lag_samples,preamble_found

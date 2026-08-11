@@ -49,7 +49,7 @@ def spec_to_network_input(x, opts):
         y_abs = torch.abs(y)
         y_abs_max = torch.tensor(
             list(map(lambda x: torch.max(x), y_abs)))
-        y_abs_max = to_var(torch.unsqueeze(torch.unsqueeze(y_abs_max, 1), 2))
+        y_abs_max = torch.unsqueeze(torch.unsqueeze(y_abs_max, 1), 2).to(y.device)
         y = torch.div(y, y_abs_max)
 
     if opts.x_image_channel == 2:

@@ -44,7 +44,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _CHECKPOINT_MAP = {
     7: Path(__file__).resolve().parent
         / "models" / "calora" / "checkpoints" / "sf7" / "ori_checkpoints"
-        / "preamble_best_finetuned.pth",
+        / "best_finetuned_train_cfo.pth",
 }
 
 _MODEL_CACHE: dict = {}
@@ -268,7 +268,7 @@ def plot_debug_spectrogram(
 # CALoRa preamble detection
 # ─────────────────────────────────────────────────────────────────────────────
 CALORA_THRESH = 0.5            # Probability threshold (mean_prob > thresh)
-LOCATION_TOL_COLS = 33         # Tolerance in spectrogram columns (~1 LoRa symbol)
+LOCATION_TOL_COLS = 37         # Tolerance in spectrogram columns (~1 LoRa symbol)
 
 
 def detect_preamble_calora(opts, iq: np.ndarray):
@@ -358,6 +358,10 @@ def watchdog_loop():
             )
             print("-" * 62)
             tot_tp = tot_fp = tot_fn = tot_tn = 0
+
+            # Collect rows for CSV output
+            csv_rows = []
+
             for snr in sorted(GLOBAL_STATS):
                 s        = GLOBAL_STATS[snr]
                 tp, fp, fn, tn = s["tp"], s["fp"], s["fn"], s["tn"]
@@ -370,6 +374,8 @@ def watchdog_loop():
                 tot_fn += fn
                 tot_tn += tn
 
+                csv_rows.append((snr, det_rate))
+
                 print(
                     f"{snr:>5} | {n_total:>5} | {tp:>5} | {fp:>5} | {fn:>5} | {avg_prob:>8.4f} | {det_rate:>7.2f}%"
                 )
@@ -379,6 +385,24 @@ def watchdog_loop():
                 overall_det_rate = (tot_tp / tot_all) * 100
                 print("-" * 62)
                 print(f"Overall TP={tot_tp} FP={tot_fp} FN={tot_fn} TN={tot_tn} | DetRate: {overall_det_rate:.2f}%")
+
+            # ── Write SNR & DetRate to CSV ────────────────────────────────
+            import csv
+            from datetime import datetime
+
+            results_dir = Path(__file__).resolve().parent / "results"
+            results_dir.mkdir(exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_path  = results_dir / f"calora_results_{timestamp}.csv"
+
+            with open(csv_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["SNR", "DetRate"])
+                for snr_val, det_val in csv_rows:
+                    writer.writerow([snr_val, round(det_val, 4)])
+
+            print(f"\n📄 Results saved to: {csv_path}")
         time.sleep(1)
 
 
@@ -427,13 +451,11 @@ def upload_calora():
     
     win_len = opts.n_classes // 2
     hop     = win_len // 2
-    true_start_col = (true_start_samples // hop) - offset_in_spec # true_start_samples // hop
+    true_start_col = ((true_start_samples // hop) + 1) - offset_in_spec # true_start_samples // hop
     
     # ── CALoRa preamble detection ────────────────────────────────────────────
     spec_tensor = iq_to_network_input(np_lora_signal, opts.sf, opts.bw, opts.fs)
     is_detected, t_start, t_end, mean_prob = detect_preamble_calora(opts, np_lora_signal)
-    print(is_detected)
-    print(t_start)
     
     # Save a debugging plot for packet #1
     if index == 10 or index == 3:
@@ -452,7 +474,7 @@ def upload_calora():
     
     bool_pred  = mean_prob > CALORA_THRESH
     # bool_exist = abs(t_start - true_start_col) <= LOCATION_TOL_COLS
-    bool_exist = abs(t_start - 66) <= LOCATION_TOL_COLS
+    bool_exist = abs(t_start - true_start_col) <= LOCATION_TOL_COLS
 
     print("t_start:", t_start, "| true_start_col:", true_start_col, "| mean_prob:", round(mean_prob, 4), "| pred:", bool_pred, "| exist:", bool_exist)
 

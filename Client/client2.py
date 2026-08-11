@@ -24,7 +24,7 @@ opts = parser.parse_args()
 
 # ── Route pointing to main2.py ─────────────────────────────────────────────────
 url = "http://127.0.0.1:5005/upload_calora"
-
+# url = "http://192.168.50.81:9999/upload_calora"
 
 def send_lora_to_calora_server(opts, noise_seed):
     """Build a LoRa packet (identical to client.py) and POST it to /upload_calora."""
@@ -71,11 +71,11 @@ def send_lora_to_calora_server(opts, noise_seed):
 
 def run_batch(
     base_opts,
-    n_packets=10,
+    n_packets=1000,
     cfo_hz_range=(0, 0),
     sto_samp_range=(0, 0),
-    snr_db_range=(-15, 10),
-    seed=1234,
+    snr_db_range=(-35, -10),
+    seed=-10,
 ):
     rng = np.random.default_rng() if seed < 0 else np.random.default_rng(seed)
 
@@ -102,9 +102,9 @@ opts.gateway_id = 1
 #note STO cannot be negative
 results = run_batch(
     base_opts=opts,
-    n_packets=1000,
-    cfo_hz_range=(-3000, 3000),
-    sto_samp_range=(0, 1000),
-    snr_db_range=(-20, -10),
+    n_packets=2000,
+    cfo_hz_range=(-4750, 4575), #4575
+    sto_samp_range=(0, 0),
+    snr_db_range=(-35, 0),
     seed=-12,
 )

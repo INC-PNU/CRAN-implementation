@@ -36,8 +36,10 @@ def watchdog_loop():
             # 👉 put your action here (e.g., print stats, reset, etc.)
             wd.update()  # optional: prevent repeated spam
             print("-----------SUMMARY----------")
-            print(f"{'SNR':>5} | {'TRUE':>5} | {'F':>3} | {'ACC':>8} | {'PREAM':>6} | {'DOWN':>6} | {'ACC_T':>7}")
-            print("-" * 58)
+            print(f"{'SNR':>5} | {'TRUE':>5} | {'F':>3} | {'ACC':>8} | {'PRE-UNDE':>6} | {'DOWN':>6} | {'ACC_T':>7} | {'PRE-DET':>6} | {'N':>4} | {'ACC_PREAM_DET':>7}")
+            print("-" * 100)
+            # Collect rows for CSV output
+            csv_rows = []
 
             for snr in sorted(GLOBAL_STATS):
                 s = GLOBAL_STATS[snr]
@@ -45,13 +47,34 @@ def watchdog_loop():
                 false_ = s['false']
                 prem = s['preamble_undetected']
                 down = s['downchirp_undetected']
+                pre_det = s['Preamble_detected']
+                total_packet = s['total_packet']
                 if (true_ == 0 and false_ == 0):
                     acc = 0
                 else:
                     acc = true_ * 100 / (true_ + false_)
                 tot = true_ + false_ + (prem * 10) + (down * 10)
                 acc_total = true_* 100 / (tot)
-                print(f"{snr:>5} | {s['true']:>5} | {s['false']:>3} | {acc:>7.2f}% | {prem:>6} | {down:>6} | {acc_total:>6.2f}%")
+                acc_preamble = pre_det / total_packet * 100
+                csv_rows.append((snr, acc_preamble))
+                print(f"{snr:>5} | {s['true']:>5} | {s['false']:>3} | {acc:>7.2f}% | {prem:>8} | {down:>6} | {acc_total:>7f} | {pre_det:>7} | {total_packet:>4} | {acc_preamble:>7.2f}%")
+            # ── Write SNR & DetRate to CSV ────────────────────────────────
+            import csv
+            from datetime import datetime
+
+            results_dir = Path(__file__).resolve().parent / "results"
+            results_dir.mkdir(exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_path  = results_dir / f"conventional_results_{timestamp}.csv"
+
+            with open(csv_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["SNR", "DetRate"])
+                for snr_val, det_val in csv_rows:
+                    writer.writerow([snr_val, round(det_val, 4)])
+
+            print(f"\n📄 Results saved to: {csv_path}")
         time.sleep(1)
 
 wd = Watchdog(5)
@@ -88,6 +111,8 @@ def create_stats():
         "true": 0,
         "preamble_undetected": 0,
         "downchirp_undetected": 0,
+        "Preamble_detected": 0,
+        "total_packet": 0,
     }
 
 GLOBAL_STATS = defaultdict(create_stats)
@@ -156,7 +181,12 @@ def upload():
         }).inserted_id
     
     ######################## TES SENSING PREAMBLE #############################
-    index_payload, cfo, sto = detect_cfo_sto(opts, LoRa, np_lora_signal)
+    index_payload, cfo, sto, pream_found = detect_cfo_sto(opts, LoRa, np_lora_signal)
+    if (pream_found):
+        GLOBAL_STATS[snr]["Preamble_detected"] += 1
+        GLOBAL_STATS[snr]["total_packet"] += 1
+    else:
+        GLOBAL_STATS[snr]["total_packet"] += 1
     
     if index_payload == -1:
         

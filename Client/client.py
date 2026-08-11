@@ -39,7 +39,7 @@ url = "http://127.0.0.1:5000/upload"
 def send_lora_to_server(opts,noise_seed):
 
     preamble= create_lora_preamble(opts,LoRa)
-    sequence = [0,120,0,119,100,100,1,2,3,127]
+    sequence = [0,120,0,119,100,100,1,2,3,127] 
     payload = create_lora_payload(opts,LoRa,sequence)
 
     sequence_ = [999,1222]
@@ -148,10 +148,10 @@ opts.gateway_id = 1
 # # # call batch example
 results = run_batch(
     base_opts=opts,
-    n_packets=1000,
-    cfo_hz_range=(0, 0),
-    sto_samp_range=(0, 0),
-    snr_db_range=(-25, -5),
+    n_packets=5000,
+    cfo_hz_range=(-4575, 4575),
+    sto_samp_range=(0, 512),
+    snr_db_range=(-30, -10),
     seed=-11, #11 no pm undetc
 )
 
