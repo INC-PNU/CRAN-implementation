@@ -7,6 +7,10 @@ __pycache__/
 *.PNG
 
 *.npy
+*.pkl
+*.pth
+*.pt
+**/storage/
 **/__pycache__/
 # C extensions
 *.so
