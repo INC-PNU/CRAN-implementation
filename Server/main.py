@@ -62,7 +62,7 @@ def watchdog_loop():
             import csv
             from datetime import datetime
 
-            results_dir = Path(__file__).resolve().parent / "results"
+            results_dir = Path(__file__).resolve().parent / "temp_results"
             results_dir.mkdir(exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
