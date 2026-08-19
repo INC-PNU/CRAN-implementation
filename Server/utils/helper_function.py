@@ -172,7 +172,14 @@ def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
 
 ## Versi 3 ##
 ## different approach for finding argMax #
-def detect_cfo_sto(opts,LoRa,rx_samples):
+def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None):
+    """
+    preamble_hint_symbol: optional externally-supplied symbol-frame index (e.g. from a
+    neural preamble detector such as CALoRa) marking where the preamble begins. When
+    given, the classical sliding-window preamble search below is skipped and the
+    downchirp/CFO/STO estimation resumes directly from that frame — the rest of the
+    algorithm (and its default no-hint behavior) is unchanged.
+    """
 
     THRESHOLD_FOR_PREAMBLE_DETECTION = 0.625
     factor = 1.4
@@ -185,14 +192,21 @@ def detect_cfo_sto(opts,LoRa,rx_samples):
     symbol_time = opts.n_classes / opts.bw  # Symbol duration
     t = np.arange(0, symbol_time, 1/opts.fs)
 
-    total_buffer = 0
-    i = 0
     global_index_that_start_a_down_chirp = None
-    preamble_found_index = None
     dechirped_max = []
     Current_symbol = [-1,-2,-3,-4,-5,-6,-7,-8]
     keep_going = True
-    preamble_found = False
+
+    if preamble_hint_symbol is not None:
+        i = max(0, int(preamble_hint_symbol))
+        total_buffer = i * framePerSymbol
+        preamble_found = True
+        preamble_found_index = i
+    else:
+        total_buffer = 0
+        i = 0
+        preamble_found_index = None
+        preamble_found = False
 
     while (total_buffer < len(rx_samples) and keep_going):
         frameBuffer = rx_samples[total_buffer:(total_buffer + framePerSymbol)]

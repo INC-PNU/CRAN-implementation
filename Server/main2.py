@@ -44,7 +44,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _CHECKPOINT_MAP = {
     7: Path(__file__).resolve().parent
         / "models" / "calora" / "checkpoints" / "sf7" / "ori_checkpoints"
-        / "best_finetuned_train_cfo.pth",
+        / "premamble_best_finetuned_cfo_mix.pth",
 }
 
 _MODEL_CACHE: dict = {}
@@ -197,7 +197,6 @@ def iq_to_network_input(iq: np.ndarray, sf: int, bw: int, fs: int, num_symbols: 
     sigma = float(mag.std() + 1e-6)
     mag = (mag - mu) / sigma
    
-    print("CALoRa Tensor Shape:", mag.shape)
     return mag.to(DEVICE)
 
 
