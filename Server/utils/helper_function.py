@@ -104,6 +104,14 @@ def round_left_left_zero(x):
 def to_nearest_N_center(x,n_classes):
     return x - (n_classes//2) * round(x / (n_classes//2))
 
+def wrap_symmetric(x, n):
+    """Wrap x into (-n/2, n/2] — the range a timing offset stays recoverable in,
+    since an STO is only ever observable modulo one symbol."""
+    x = x % n
+    if x > n / 2:
+        x -= n
+    return x
+
 def estimate_cfo_frac(
     opts, # important parameter
     s, # signal
@@ -172,13 +180,20 @@ def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
 
 ## Versi 3 ##
 ## different approach for finding argMax #
-def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None):
+def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint_symbol=None):
     """
     preamble_hint_symbol: optional externally-supplied symbol-frame index (e.g. from a
     neural preamble detector such as CALoRa) marking where the preamble begins. When
     given, the classical sliding-window preamble search below is skipped and the
     downchirp/CFO/STO estimation resumes directly from that frame — the rest of the
     algorithm (and its default no-hint behavior) is unchanged.
+
+    downchirp_hint_symbol: optional symbol-frame index of the FIRST down-chirp, supplied
+    externally (main3.py derives it from CALoRa's t_end plus the 2 network-id/sync symbols
+    that sit between the up-chirps and the down-chirps). When given, the amplitude-threshold
+    scan that hunts for the down-chirp is skipped entirely and STO is solved in closed form
+    from the up/down chirp pair instead of by cross-correlation — see MODUL STO V3 below.
+    Both hints default to None, so main.py's own call is unaffected.
     """
 
     THRESHOLD_FOR_PREAMBLE_DETECTION = 0.625
@@ -197,7 +212,40 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None):
     Current_symbol = [-1,-2,-3,-4,-5,-6,-7,-8]
     keep_going = True
 
-    if preamble_hint_symbol is not None:
+    if downchirp_hint_symbol is not None:
+        # The down-chirp frame is handed to us, so the scan below is skipped outright.
+        # The hint is only approximate ("kira-kira"), so refine it over ±1 frame using
+        # the same score the scan uses: dechirping a frame against the up-chirp collapses
+        # a real down-chirp into a single tone (tall FFT peak), while an up-chirp or a
+        # sync symbol stays spread out.
+        #
+        # The pick must resolve to the FIRST down-chirp: downstream the payload is placed a
+        # fixed 2.25 frames on from here, so landing on the second one puts it a whole symbol
+        # late. Picking between two frames that are both down-chirps by their own scores is
+        # unreliable — the two are near-equal, so noise alone decides the winner.
+        #
+        # The preamble carries exactly TWO adjacent down-chirps, so score neighbouring PAIRS
+        # instead and take the earlier frame of the strongest pair. A pair-vs-pair comparison
+        # is decided by the sync symbol in front (weak) versus the second down-chirp behind
+        # (strong), which is a real difference rather than a coin flip.
+        preamble_found = True
+        preamble_found_index = max(0, int(downchirp_hint_symbol) - opts.no_of_preamble - 2)
+        candidates = []
+        for cand in range(max(0, int(downchirp_hint_symbol) - 1), int(downchirp_hint_symbol) + 2):
+            frameBuffer = rx_samples[cand*framePerSymbol:(cand+1)*framePerSymbol]
+            if len(frameBuffer) != framePerSymbol:
+                continue
+            candidates.append((cand, np.max(np.abs(np.fft.fft(frameBuffer * up_chirp_signal)))))
+        if len(candidates) >= 2:
+            pair_scores = [candidates[k][1] + candidates[k + 1][1]
+                           for k in range(len(candidates) - 1)]
+            global_index_that_start_a_down_chirp = candidates[int(np.argmax(pair_scores))][0]
+        elif candidates:
+            global_index_that_start_a_down_chirp = candidates[0][0]
+        i = int(downchirp_hint_symbol)
+        total_buffer = i * framePerSymbol
+        keep_going = False
+    elif preamble_hint_symbol is not None:
         i = max(0, int(preamble_hint_symbol))
         total_buffer = i * framePerSymbol
         preamble_found = True
@@ -267,7 +315,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None):
               
         i = i + 1
     
-    if (global_index_that_start_a_down_chirp < 10):
+    if (global_index_that_start_a_down_chirp is None or global_index_that_start_a_down_chirp < 10):
         return -2,None,None,preamble_found
     global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25
     
@@ -277,11 +325,22 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None):
    
     correction_factor_by_cfo_frac = np.exp(-1j * 2 * np.pi * (CFO_FRAC_estimation)* t)
     
-    #dechirped_up = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac * down_chirp_signal  #VERSI 1.1
-    dechirped_up = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * down_chirp_signal  #VERSI 1.2
-    
-    #dechirped_down = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac * up_chirp_signal #VERSI 1.1
-    dechirped_down = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * up_chirp_signal #VERSI 1.2
+    if downchirp_hint_symbol is not None:
+        # VERSI 1.1 — take the fractional CFO off the signal BEFORE the peaks are measured.
+        # Estimating it is not enough on its own: left in place, the dechirped tone sits at
+        # (CFO_int + CFO_frac + N - STO_int) bins, so the sub-bin lean of the peak carries
+        # the fractional CFO as well as the fractional STO — and shift_sto_index below reads
+        # that lean as timing alone, charging the whole thing to STO. Removing it first
+        # leaves the lean meaning only what shift_sto_index thinks it means.
+        up_frame = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac
+        down_frame = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac
+    else:
+        #VERSI 1.1 (see above) is kept off here so main.py's behavior is unchanged.
+        up_frame = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol]
+        down_frame = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol]
+
+    dechirped_up = up_frame * down_chirp_signal      #VERSI 1.2
+    dechirped_down = down_frame * up_chirp_signal    #VERSI 1.2
 
     #########################################################
     psd_up = np.abs(np.fft.fftshift(np.fft.fft(dechirped_up)))  
@@ -407,46 +466,83 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None):
     # # print("THISSSSSSSS")
     # ################### MODUL STO  V2 (FAILED) ###################################
 
-    ################### MODUL STO V1 Better so far ###################################
     cfo_test_boleh_delete_soon = CFO_FINAL
     # print("CFO FIn al:",CFO_FINAL)
     correction_factor_by_cfo_total = np.exp(-1j * 2 * np.pi * ( cfo_test_boleh_delete_soon)* t)
-    rx_samples_corrected_cfo =  rx_samples[(fup_chosen-1)*framePerSymbol:(fup_chosen-1)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_total
-    rx_samples_corrected_cfo =  rx_samples[(fup_chosen-2)*framePerSymbol:(fup_chosen-2)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_total
-    corr = correlate(rx_samples_corrected_cfo, up_chirp_signal, mode="full", method="fft")
-    peak_index = np.argmax(np.abs(corr))
-    lag_samples = peak_index - (samplePerSymbol - 1)  # 0 means perfectly aligned
-    # print("Lag in samples:", lag_samples)
-    ################### MODUL STO V1 Better so far ###################################
+
+    if downchirp_hint_symbol is not None:
+        ################### MODUL STO V3 (closed form, up/down chirp pair) ###############
+        # The same two dechirped peaks that gave CFO also give STO. With the base up-chirp
+        # B[k] = exp(j2pi(k^2/2N - k/2)), the preamble up-chirp and the down-chirp carry the
+        # SAME offsets, so dechirping each against the opposite reference leaves a pure tone:
+        #
+        #     f_up   = CFO_int/BW + (N - STO_int)/N        (up-chirp   x conj(B))
+        #     f_down = CFO_int/BW - (N - STO_int)/N        (down-chirp x B)
+        #
+        # Adding them cancels STO and gives the CFO already computed above; subtracting them
+        # cancels CFO and gives STO. Solving the first equation for STO_int directly:
+        #
+        #     STO_int = N * (CFO_int/BW + 1 - f_up)
+        #
+        # and since a peak at bin m means f = m/N, that collapses to CFO + N - symbol_up in
+        # units of chips. One chip is fs/bw samples. STO is only observable modulo one symbol,
+        # so wrap into (-N/2, N/2] to match the receiver's fixed frame grid.
+        #
+        # argmax only resolves whole chips, which leaves up to half a chip (4 samples) of
+        # error. shift_sto_index, computed further up from how the two bins either side of
+        # the up-chirp peak lean, recovers that sub-chip remainder and is added back here.
+        over_sample = opts.fs / opts.bw
+        STO_INT_CHIPS = wrap_symmetric(CFO + opts.n_classes - symbol_up, opts.n_classes)
+        lag_samples = STO_INT_CHIPS * over_sample + shift_sto_index
+        ################### MODUL STO V3 (closed form, up/down chirp pair) ###############
+    else:
+        ################### MODUL STO V1 Better so far ###################################
+        rx_samples_corrected_cfo =  rx_samples[(fup_chosen-1)*framePerSymbol:(fup_chosen-1)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_total
+        rx_samples_corrected_cfo =  rx_samples[(fup_chosen-2)*framePerSymbol:(fup_chosen-2)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_total
+        corr = correlate(rx_samples_corrected_cfo, up_chirp_signal, mode="full", method="fft")
+        peak_index = np.argmax(np.abs(corr))
+        lag_samples = peak_index - (samplePerSymbol - 1)  # 0 means perfectly aligned
+        # print("Lag in samples:", lag_samples)
+        ################### MODUL STO V1 Better so far ###################################
 
     ################## SYNC detection #############################
-    # Find the exact index that match the Sync Symbol
-    # That index will be reference index to know when to start a payload
-    i_down = int(global_index_that_start_a_down_chirp) - 1 #1
-    # print("down",global_index_that_start_a_down_chirp)
-    i_down_2 = i_down - 1
-    sto = int(lag_samples)
-   
-    dechirped_sync_1 = rx_samples[(i_down)*framePerSymbol + sto:(i_down)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total
-    dechirped_sync_2 = rx_samples[(i_down_2)*framePerSymbol + sto:(i_down_2)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total 
-      
-    symbol_sync_1,_ = estimate_symbol(opts,LoRa, dechirped_sync_1)
-    symbol_sync_2,_ = estimate_symbol(opts,LoRa, dechirped_sync_2)
-    
-    if (symbol_sync_1 == opts.sync_sym[1]):
-        
-        global_index_that_start_a_payload += 1
-    elif (symbol_sync_1 == opts.sync_sym[0]):
-        global_index_that_start_a_payload -= 0
-    elif (symbol_sync_2 == opts.sync_sym[1]):
-        global_index_that_start_a_payload -= 0
-    elif (symbol_sync_2 == opts.sync_sym[0]):
-        global_index_that_start_a_payload += 1
+    if downchirp_hint_symbol is not None:
+        # No network-id decode on the CALoRa path. The only thing it decided was whether the
+        # scan had landed on the first or the second down-chirp, and the candidate search
+        # above already settles that structurally. Its other effect was to reject the packet
+        # outright, and that is exactly what made it harmful: reading a sync symbol needs a
+        # full symbol demodulation, which falls apart at low SNR long before locating a
+        # down-chirp does — so it was throwing away packets whose CFO/STO were perfectly
+        # good. The payload simply sits 2.25 frames past the first down-chirp.
+        global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 2.25
     else:
-        global_index_that_start_a_payload += 1
-        return -2,None,None,preamble_found
-    if (global_index_that_start_a_payload > 15):
-        global_index_that_start_a_payload -=1
+        # Find the exact index that match the Sync Symbol
+        # That index will be reference index to know when to start a payload
+        i_down = int(global_index_that_start_a_down_chirp) - 1 #1
+        # print("down",global_index_that_start_a_down_chirp)
+        i_down_2 = i_down - 1
+        sto = int(lag_samples)
+
+        dechirped_sync_1 = rx_samples[(i_down)*framePerSymbol + sto:(i_down)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total
+        dechirped_sync_2 = rx_samples[(i_down_2)*framePerSymbol + sto:(i_down_2)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total
+
+        symbol_sync_1,_ = estimate_symbol(opts,LoRa, dechirped_sync_1)
+        symbol_sync_2,_ = estimate_symbol(opts,LoRa, dechirped_sync_2)
+
+        if (symbol_sync_1 == opts.sync_sym[1]):
+
+            global_index_that_start_a_payload += 1
+        elif (symbol_sync_1 == opts.sync_sym[0]):
+            global_index_that_start_a_payload -= 0
+        elif (symbol_sync_2 == opts.sync_sym[1]):
+            global_index_that_start_a_payload -= 0
+        elif (symbol_sync_2 == opts.sync_sym[0]):
+            global_index_that_start_a_payload += 1
+        else:
+            global_index_that_start_a_payload += 1
+            return -2,None,None,preamble_found
+        if (global_index_that_start_a_payload > 15):
+            global_index_that_start_a_payload -=1
     ################## SYNC detection #############################
-    
+
     return global_index_that_start_a_payload,CFO_FINAL,lag_samples,preamble_found

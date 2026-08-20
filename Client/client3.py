@@ -80,7 +80,7 @@ def send_lora_to_offset_server(opts, noise_seed, rng):
 
 def run_batch(
     base_opts,
-    n_packets=1000,
+    n_packets=2000,
     cfo_hz_range=(0, 0),
     sto_samp_range=(0, 0),
     snr_db_range=(-35, -10),
@@ -135,9 +135,9 @@ if __name__ == "__main__":
     # dominating the results.
     results = run_batch(
         base_opts=opts,
-        n_packets=400,
-        cfo_hz_range=(0, 0),
-        sto_samp_range=(0, 50),
-        snr_db_range=(-30, -5),
+        n_packets=2000,
+        cfo_hz_range=(-4358,4584),
+        sto_samp_range=(0, 340),
+        snr_db_range=(-5, 15),
         seed=-12,
     )

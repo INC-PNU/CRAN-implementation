@@ -16,8 +16,13 @@ Route:  POST /upload_offset
 
 This file does not modify or import anything that would change main2.py/client2.py's
 behavior — it only imports main2's already-loaded CALoRa model/detector functions for
-reuse. detect_cfo_sto's new `preamble_hint_symbol` parameter defaults to None, so
-main.py/main2.py's own calls (which never pass it) are unaffected.
+reuse. detect_cfo_sto's `preamble_hint_symbol`/`downchirp_hint_symbol` parameters both
+default to None, so main.py/main2.py's own calls (which never pass them) are unaffected.
+
+CFO/STO are solved in closed form from the classic up/down chirp pair: CALoRa's t_end
+locates the up-chirp run, +2 sync symbols locates the first down-chirp, and the up-chirp
+is taken a fixed 5 frames before it. Dechirping each against the opposite reference gives
+two tones whose sum yields CFO_int and whose difference yields STO_int.
 """
 
 from flask import Flask, request, jsonify
@@ -55,6 +60,11 @@ STO_TOL_SAMPLES = None  # computed per-request from fs/bw (~1 chip)
 # ─────────────────────────────────────────────────────────────────────────────
 # Ground-truth STO helper
 # ─────────────────────────────────────────────────────────────────────────────
+# client3.py prefixes every packet with 2 frames of noise (its `sequence_ = [999, 1222]`,
+# symbols out of range so create_lora_payload emits random samples) before the preamble.
+N_NOISE_FRAMES = 2
+
+
 def _wrap_symmetric(x, n):
     """Wrap x into (-n/2, n/2] modulo n."""
     x_mod = x % n
@@ -280,18 +290,55 @@ def upload_offset():
         wd.update()
         return jsonify({"status": "fail", "stage": "preamble_not_detected", "mean_prob": round(mean_prob, 4)}), 200
 
-    # Convert the CALoRa spectrogram column back into a symbol-frame index, so
-    # detect_cfo_sto can resume its downchirp/CFO/STO search from there directly.
+    # Convert CALoRa's spectrogram columns back into a symbol-frame index, so
+    # detect_cfo_sto can jump straight to the down-chirp instead of scanning for it.
+    #
+    # CALoRa is trained to label only the 8 up-chirps (its Ls candidates are 262/264/266
+    # columns ~ 8 symbols), so t_end is the LAST column of the up-chirp run and t_end+1 is
+    # the first column of the network-id/sync pair. Rounding that to a whole symbol boundary
+    # gives the sync frame; the 2 sync symbols then put the first down-chirp 2 frames later.
     win_len = opts.n_classes // 2
     hop = win_len // 2
     cols_per_symbol = framePerSymbol // hop + 1
-    hint_symbol_index = max(0, t_start // cols_per_symbol)
-    print(t_start, t_start // cols_per_symbol)
+    sync_symbol_index = int(round((t_end + 1) / cols_per_symbol))
+    downchirp_hint_index = max(0, sync_symbol_index + 2)
+
     # ── Stage 2: classical CFO/STO estimation, hinted by CALoRa's location ──────
     index_payload, cfo_est, sto_est, preamble_found = detect_cfo_sto(
-        opts, LoRa, np_lora_signal, preamble_hint_symbol=hint_symbol_index
+        opts, LoRa, np_lora_signal, downchirp_hint_symbol=downchirp_hint_index
     )
-    print(cfo_est, sto_est, preamble_found)
+
+    sto_true = true_fine_sto(true_offset, framePerSymbol)
+
+    # ── Debug trace for the first few packets ────────────────────────────────────
+    # Printed BEFORE the failure check below, so a packet that fails offset estimation
+    # still shows what it should have found. Ground truth follows client3.py's layout:
+    # 2 noise frames, then 8 up-chirps + 2 network-id symbols + 2.25 down-chirps, then
+    # the payload — with `true_offset` samples cropped off the front afterwards.
+    if index <= 5 or (index > 1000 and snr == -7):
+        gt_preamble_sample = N_NOISE_FRAMES * framePerSymbol - true_offset
+        gt_downchirp_frame = N_NOISE_FRAMES + no_of_preamble + 2      # past the 2 sync symbols
+        gt_payload_frame = gt_downchirp_frame + 2.25                  # past the 2.25 down-chirps
+        # Column index the same way iq_to_network_input builds it: every symbol chunk is
+        # STFT'd on its own into cols_per_symbol columns, so a sample maps to
+        # chunk*cols_per_symbol + (offset within chunk)/hop.
+        gt_preamble_col = ((gt_preamble_sample // framePerSymbol) * cols_per_symbol
+                           + (gt_preamble_sample % framePerSymbol) / hop)
+
+        print(f"\n[dbg #{index}] SNR={snr} dB " + "-" * 52)
+        print(f"   ground truth : cfo={true_cfo:.1f} Hz | sto={sto_true:.1f} samples "
+              f"(client cropped {true_offset})")
+        print(f"   preamble at  : sample={gt_preamble_sample} | frame={N_NOISE_FRAMES} "
+              f"| spec column={gt_preamble_col:.1f}")
+        print(f"   CALoRa       : t_start={t_start} (gt {gt_preamble_col:.1f}) | t_end={t_end} "
+              f"| mean_prob={mean_prob:.4f}")
+        print(f"   down-chirp   : frame={downchirp_hint_index} (gt {gt_downchirp_frame})")
+        if cfo_est is None:
+            print(f"   estimate     : FAILED at offset estimation (index_payload={index_payload})")
+        else:
+            print(f"   estimate     : cfo={cfo_est:.1f} Hz (err={cfo_est - true_cfo:+.1f}) "
+                  f"| sto={sto_est:.1f} samples (err={sto_est - sto_true:+.1f})")
+            print(f"   payload at   : frame={index_payload:.2f} (gt {gt_payload_frame:.2f})")
 
     if index_payload in (-1, -2) or index_payload is None:
         s["offset_fail"] += 1
@@ -299,7 +346,6 @@ def upload_offset():
         return jsonify({"status": "fail", "stage": "offset_estimation_failed"}), 200
 
     # ── Offset-detection accuracy ────────────────────────────────────────────────
-    sto_true = true_fine_sto(true_offset, framePerSymbol)
     cfo_err = float(cfo_est - true_cfo)
     sto_err = float(sto_est - sto_true)
 
@@ -333,12 +379,12 @@ def upload_offset():
         s["symbol_total"] += n_compare
         s["symbol_correct"] += matches
 
-    if index <= 5:
-        print(
-            f"[dbg #{index}] SNR={snr} true_cfo={true_cfo:.1f} est_cfo={cfo_est:.1f} "
-            f"(err={cfo_err:+.1f}Hz) | true_sto={sto_true:.2f} est_sto={sto_est:.2f} "
-            f"(err={sto_err:+.2f}) | demod={demod_symbols} gt={payload_symbols_gt}"
-        )
+    if index <= 5  or (index > 1000 and snr == -7):
+        # cfo/sto and their errors are already in the debug block above — only the
+        # demodulated payload is left to report here.
+        n_ok = "length mismatch" if demod_result is None else f"{demod_result[1]}/{demod_result[0]} correct"
+        print(f"   demod        : {[int(x) for x in demod_symbols]}")
+        print(f"   payload gt   : {payload_symbols_gt}  -> {n_ok}")
 
     wd.update()
     return jsonify({
