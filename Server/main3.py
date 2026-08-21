@@ -52,6 +52,70 @@ logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 CALORA_THRESH = main2.CALORA_THRESH
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  EXPERIMENT TOGGLES — edit, restart this server, then run client3.py
+#  Every combination writes its own CSV (the mode tag goes in the filename), so
+#  runs never overwrite each other and stay traceable.
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ── Demodulation stage (this file) ───────────────────────────────────────────
+# Multiply the payload by exp(-j2.pi.cfo_est.t) before demodulating.
+# OFF -> every symbol comes out shifted by round(CFO / (bw/n_classes)), the same
+#        constant for the whole packet (cyclic, mod n_classes). Symbol accuracy
+#        collapses to roughly the fraction of packets whose CFO happens to fall
+#        inside half a bin.
+APPLY_CFO_CORRECTION = False
+
+# Add sto_est to the payload crop point.
+# OFF -> the payload is cropped on the nominal frame grid instead, so the whole
+#        injected timing offset stays uncompensated.
+APPLY_STO_CORRECTION = True
+
+# ── Estimation stage (utils/helper_function.py, CALoRa path only) ────────────
+# VERSI 1.1: remove the fractional CFO from the signal before the FFT peaks are
+# read. OFF -> the fractional CFO leaks into the STO estimate as up to ±0.5 chip,
+# and pushes the integer CFO onto the wrong bin whenever the fraction nears 0.5.
+PRECORRECT_CFO_FRAC = True
+
+# Add shift_sto_index, the sub-chip STO refinement.
+# OFF -> STO is quantised to whole chips (fs/bw = 8 samples at SF7/1 MHz).
+USE_FRACTIONAL_STO = True
+
+# Decode the 2 network-id/sync symbols and reject the packet if neither matches.
+# ON -> reproduces the conventional guard. It only rejects; it cannot improve an
+#       estimate, and a sync decode needs far more SNR than locating a down-chirp.
+VERIFY_NETWORK_ID = False
+
+# How many frames either side of the CALoRa hint to search for the down-chirp.
+DOWNCHIRP_SEARCH_RADIUS = 1
+
+
+def mode_tag():
+    """Compact, filename-safe summary of the toggles above."""
+    return (f"cfo{int(APPLY_CFO_CORRECTION)}"
+            f"_sto{int(APPLY_STO_CORRECTION)}"
+            f"_frac{int(PRECORRECT_CFO_FRAC)}"
+            f"_fsto{int(USE_FRACTIONAL_STO)}"
+            f"_nid{int(VERIFY_NETWORK_ID)}"
+            f"_r{DOWNCHIRP_SEARCH_RADIUS}")
+
+
+def print_modes():
+    print("=" * 62)
+    print("  ACTIVE MODES".ljust(46) + mode_tag())
+    print("=" * 62)
+    for name, value in (
+        ("APPLY_CFO_CORRECTION", APPLY_CFO_CORRECTION),
+        ("APPLY_STO_CORRECTION", APPLY_STO_CORRECTION),
+        ("PRECORRECT_CFO_FRAC", PRECORRECT_CFO_FRAC),
+        ("USE_FRACTIONAL_STO", USE_FRACTIONAL_STO),
+        ("VERIFY_NETWORK_ID", VERIFY_NETWORK_ID),
+    ):
+        print(f"  {'ON ' if value else 'off'}  {name}")
+    print(f"       DOWNCHIRP_SEARCH_RADIUS = {DOWNCHIRP_SEARCH_RADIUS}")
+    print("=" * 62)
+
 # Tolerance for the offset "success rate" metric.
 CFO_TOL_HZ = None       # computed per-request from bw/n_classes (half a frequency bin)
 STO_TOL_SAMPLES = None  # computed per-request from fs/bw (~1 chip)
@@ -139,6 +203,7 @@ def watchdog_loop():
             ended = True
             print("\nTimeout! No upload_offset received.")
             wd.update()
+            print_modes()
             print("----------------- SUMMARY (Offset + Demod Evaluation) -----------------")
             header = (
                 f"{'SNR':>5} | {'N':>5} | {'PreMiss':>7} | {'OffFail':>7} | "
@@ -194,7 +259,7 @@ def watchdog_loop():
             results_dir.mkdir(exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            csv_path = results_dir / f"offset_demod_results_{timestamp}.csv"
+            csv_path = results_dir / f"offset_demod_results_{timestamp}_{mode_tag()}.csv"
 
             with open(csv_path, "w", newline="") as f:
                 writer = csv.writer(f)
@@ -305,7 +370,12 @@ def upload_offset():
 
     # ── Stage 2: classical CFO/STO estimation, hinted by CALoRa's location ──────
     index_payload, cfo_est, sto_est, preamble_found = detect_cfo_sto(
-        opts, LoRa, np_lora_signal, downchirp_hint_symbol=downchirp_hint_index
+        opts, LoRa, np_lora_signal,
+        downchirp_hint_symbol=downchirp_hint_index,
+        precorrect_cfo_frac=PRECORRECT_CFO_FRAC,
+        use_fractional_sto=USE_FRACTIONAL_STO,
+        verify_network_id=VERIFY_NETWORK_ID,
+        downchirp_search_radius=DOWNCHIRP_SEARCH_RADIUS,
     )
 
     sto_true = true_fine_sto(true_offset, framePerSymbol)
@@ -360,12 +430,19 @@ def upload_offset():
         s["sto_correct"] += 1
 
     # ── Stage 3: crop + correct + demodulate the payload ────────────────────────
-    payload_start = int(index_payload * framePerSymbol) + int(sto_est)
+    # The estimates above are always computed and always scored; the toggles only
+    # decide whether they are actually APPLIED here, so the offset metrics stay
+    # comparable across modes while the demod metric shows what compensation buys.
+    payload_start = int(index_payload * framePerSymbol)
+    if APPLY_STO_CORRECTION:
+        payload_start += int(sto_est)
     payload_signal = np_lora_signal[payload_start:]
 
-    n = len(payload_signal)
-    t_axis = np.arange(n) / opts.fs
-    payload_corrected = payload_signal * np.exp(-1j * 2 * np.pi * cfo_est * t_axis)
+    if APPLY_CFO_CORRECTION:
+        t_axis = np.arange(len(payload_signal)) / opts.fs
+        payload_corrected = payload_signal * np.exp(-1j * 2 * np.pi * cfo_est * t_axis)
+    else:
+        payload_corrected = payload_signal
 
     demod_symbols = calculate_symbol_alliqfile_with_down_sampling(
         payload_corrected, opts.sf, opts.bw, opts.fs, show=False
@@ -402,5 +479,6 @@ def upload_offset():
 
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    print_modes()
     threading.Thread(target=watchdog_loop, daemon=True).start()
     app.run(host="0.0.0.0", port=5006, debug=False, threaded=False)

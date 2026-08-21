@@ -36,10 +36,15 @@ for i, bam in enumerate(multi_bam.bams):
 ###################### Make some definition REQUEST TO SERVER ##############################
 url = "http://127.0.0.1:5000/upload"
 
-def send_lora_to_server(opts,noise_seed):
+PAYLOAD_LEN = 10
+
+
+def send_lora_to_server(opts,noise_seed,rng):
 
     preamble= create_lora_preamble(opts,LoRa)
-    sequence = [0,120,0,119,100,100,1,2,3,127] 
+    # Random payload per packet. The sequence is sent alongside the IQ so the server
+    # scores demodulation against what was actually transmitted instead of a constant.
+    sequence = rng.integers(0, opts.n_classes, size=PAYLOAD_LEN).tolist()
     payload = create_lora_payload(opts,LoRa,sequence)
 
     sequence_ = [999,1222]
@@ -83,7 +88,7 @@ def send_lora_to_server(opts,noise_seed):
     iq_bytes = complete_signal_cfo_sto.tobytes()            # convert to bytes
     iq_b64 = base64.b64encode(iq_bytes).decode()    # encode to Base64, then encode to string
     
-    payload = {
+    payload_json = {
         "gateway_id": f'GW{opts.gateway_id}',
         "value": f"Hello from GW{opts.gateway_id}",
         "iq_data": iq_b64,
@@ -92,10 +97,11 @@ def send_lora_to_server(opts,noise_seed):
         "fs" : opts.fs,
         "snr" : opts.snr,
         "offset" : opts.numb_offset,
-        "cfo" : opts.CFO
+        "cfo" : opts.CFO,
+        "payload_symbols" : sequence,
     }
 
-    response = requests.post(url, json=payload)
+    response = requests.post(url, json=payload_json)
     return response
 
 
@@ -126,7 +132,7 @@ def run_batch(
         # Run one packet
         # IMPORTANT: make send_lora_to_server return something if possible
         # e.g., {"ok": True/False, "preamble_detected": bool, "down_detected": bool}
-        out = send_lora_to_server(opts, seed)
+        out = send_lora_to_server(opts, seed, rng)
 
         # # If your function currently returns nothing, set out=None and rely on GLOBAL_STATS.
         # results.append({
@@ -141,7 +147,7 @@ def run_batch(
 # base config
 opts.sf = 7
 opts.bw = 125_000
-opts.fs = 125000
+opts.fs = 1000000
 opts.n_classes = 2 ** opts.sf
 opts.gateway_id = 1
 
@@ -151,7 +157,7 @@ results = run_batch(
     n_packets=5000,
     cfo_hz_range=(-4375, 4375),
     sto_samp_range=(0, 0),
-    snr_db_range=(-35, 0),
+    snr_db_range=(-25, -5),
     seed=-11, #11 no pm undetc
 )
 

@@ -180,7 +180,9 @@ def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
 
 ## Versi 3 ##
 ## different approach for finding argMax #
-def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint_symbol=None):
+def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint_symbol=None,
+                   precorrect_cfo_frac=True,use_fractional_sto=True,verify_network_id=False,
+                   downchirp_search_radius=1):
     """
     preamble_hint_symbol: optional externally-supplied symbol-frame index (e.g. from a
     neural preamble detector such as CALoRa) marking where the preamble begins. When
@@ -194,6 +196,20 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
     scan that hunts for the down-chirp is skipped entirely and STO is solved in closed form
     from the up/down chirp pair instead of by cross-correlation — see MODUL STO V3 below.
     Both hints default to None, so main.py's own call is unaffected.
+
+    The four switches below are experiment toggles for the CALoRa path only (they are
+    ignored when downchirp_hint_symbol is None, so main.py keeps its behavior either way).
+    Their defaults are the measured-best configuration; main3.py exposes them at the top
+    of the file so a sweep can be re-run with any of them flipped:
+
+      precorrect_cfo_frac     remove the fractional CFO from the signal before the FFT
+                              peaks are read. Off -> it leaks into STO as up to ±0.5 chip.
+      use_fractional_sto      add shift_sto_index, the sub-chip STO refinement.
+                              Off -> STO is quantised to whole chips (fs/bw samples).
+      verify_network_id       decode the 2 sync symbols and reject the packet if neither
+                              matches opts.sync_sym. Off -> no rejection (the down-chirp
+                              search already resolves which down-chirp we are on).
+      downchirp_search_radius how many frames either side of the hint to search.
     """
 
     THRESHOLD_FOR_PREAMBLE_DETECTION = 0.625
@@ -231,7 +247,8 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         preamble_found = True
         preamble_found_index = max(0, int(downchirp_hint_symbol) - opts.no_of_preamble - 2)
         candidates = []
-        for cand in range(max(0, int(downchirp_hint_symbol) - 1), int(downchirp_hint_symbol) + 2):
+        for cand in range(max(0, int(downchirp_hint_symbol) - downchirp_search_radius),
+                          int(downchirp_hint_symbol) + downchirp_search_radius + 1):
             frameBuffer = rx_samples[cand*framePerSymbol:(cand+1)*framePerSymbol]
             if len(frameBuffer) != framePerSymbol:
                 continue
@@ -325,7 +342,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
    
     correction_factor_by_cfo_frac = np.exp(-1j * 2 * np.pi * (CFO_FRAC_estimation)* t)
     
-    if downchirp_hint_symbol is not None:
+    if downchirp_hint_symbol is not None and precorrect_cfo_frac:
         # VERSI 1.1 — take the fractional CFO off the signal BEFORE the peaks are measured.
         # Estimating it is not enough on its own: left in place, the dechirped tone sits at
         # (CFO_int + CFO_frac + N - STO_int) bins, so the sub-bin lean of the peak carries
@@ -493,7 +510,9 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         # the up-chirp peak lean, recovers that sub-chip remainder and is added back here.
         over_sample = opts.fs / opts.bw
         STO_INT_CHIPS = wrap_symmetric(CFO + opts.n_classes - symbol_up, opts.n_classes)
-        lag_samples = STO_INT_CHIPS * over_sample + shift_sto_index
+        lag_samples = STO_INT_CHIPS * over_sample
+        if use_fractional_sto:
+            lag_samples = lag_samples + shift_sto_index
         ################### MODUL STO V3 (closed form, up/down chirp pair) ###############
     else:
         ################### MODUL STO V1 Better so far ###################################
@@ -515,6 +534,27 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         # down-chirp does — so it was throwing away packets whose CFO/STO were perfectly
         # good. The payload simply sits 2.25 frames past the first down-chirp.
         global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 2.25
+
+        if verify_network_id:
+            # Opt-in guard. Unlike the conventional branch below it only ever REJECTS —
+            # the payload index above comes from the structural down-chirp pick, so there
+            # is nothing left for a sync decode to disambiguate. Turning this on is how you
+            # reproduce the conventional path's rejection behavior on the CALoRa path.
+            sto = int(lag_samples)
+            i_down = int(global_index_that_start_a_down_chirp) - 1
+            i_down_2 = i_down - 1
+            start_1 = (i_down) * framePerSymbol + sto
+            start_2 = (i_down_2) * framePerSymbol + sto
+            if start_2 < 0:
+                return -2, None, None, preamble_found
+            sync_frame_1 = rx_samples[start_1:start_1 + framePerSymbol] * correction_factor_by_cfo_total
+            sync_frame_2 = rx_samples[start_2:start_2 + framePerSymbol] * correction_factor_by_cfo_total
+            if len(sync_frame_1) != framePerSymbol or len(sync_frame_2) != framePerSymbol:
+                return -2, None, None, preamble_found
+            symbol_sync_1, _ = estimate_symbol(opts, LoRa, sync_frame_1)
+            symbol_sync_2, _ = estimate_symbol(opts, LoRa, sync_frame_2)
+            if (symbol_sync_1 not in opts.sync_sym) and (symbol_sync_2 not in opts.sync_sym):
+                return -2, None, None, preamble_found
     else:
         # Find the exact index that match the Sync Symbol
         # That index will be reference index to know when to start a payload

@@ -11,6 +11,25 @@ import threading
 import logging
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
+# ============================================================================
+#  EXPERIMENT TOGGLE - edit, then restart this server
+# ============================================================================
+# Multiply the payload by exp(-j2.pi.cfo.t) before demodulating, using the CFO the
+# conventional estimator found. OFF -> the payload is demodulated as-is, so every
+# symbol comes out shifted by the same round(CFO / (bw/n_classes)), cyclic mod
+# n_classes. CFO/STO are still estimated either way, so only the demod metric moves.
+APPLY_CFO_CORRECTION = True
+
+def mode_tag():
+    return f"cfo{int(APPLY_CFO_CORRECTION)}"
+
+
+def print_modes():
+    print("=" * 56)
+    print("  ACTIVE MODES".ljust(40) + mode_tag())
+    print(f"  {'ON ' if APPLY_CFO_CORRECTION else 'off'}  APPLY_CFO_CORRECTION")
+    print("=" * 56)
+
 class Watchdog:
     def __init__(self, timeout=5):
         self.timeout = timeout
@@ -21,6 +40,24 @@ class Watchdog:
 
     def is_timeout(self):
         return time.time() - self.last_update > self.timeout
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ground-truth STO helper — identical convention to main3.py so the two servers'
+# CSVs can be overlaid directly.
+# ─────────────────────────────────────────────────────────────────────────────
+def _wrap_symmetric(x, n):
+    """Wrap x into (-n/2, n/2] modulo n."""
+    x_mod = x % n
+    if x_mod > n / 2:
+        x_mod -= n
+    return x_mod
+
+
+def true_fine_sto(numb_offset_samples, frame_per_symbol):
+    """The client crops numb_offset samples off the front, so relative to the receiver's
+    fixed frame grid the chirp edges appear that many samples EARLIER (mod one symbol)."""
+    return _wrap_symmetric(-numb_offset_samples, frame_per_symbol)
+
 
 #GLOBAL   
 ended = False
@@ -33,6 +70,7 @@ def watchdog_loop():
         if wd.is_timeout() and not ended:
             ended = True
             print("⚠️ Timeout! No upload received.")
+            print_modes()
             # 👉 put your action here (e.g., print stats, reset, etc.)
             wd.update()  # optional: prevent repeated spam
             print("-----------SUMMARY----------")
@@ -56,7 +94,23 @@ def watchdog_loop():
                 tot = true_ + false_ + (prem * 10) + (down * 10)
                 acc_total = true_* 100 / (tot)
                 acc_preamble = pre_det / total_packet * 100
-                csv_rows.append((snr, acc_preamble))
+
+                # ── main3.py-compatible metrics ────────────────────────────────
+                cfo_mae = float(np.mean(s["cfo_abs_err"])) if s["cfo_abs_err"] else float("nan")
+                sto_mae = float(np.mean(s["sto_abs_err"])) if s["sto_abs_err"] else float("nan")
+                n_eval = len(s["cfo_abs_err"])
+                cfo_ok = (s["cfo_correct"] / n_eval * 100) if n_eval else 0.0
+                sto_ok = (s["sto_correct"] / n_eval * 100) if n_eval else 0.0
+                cfo_ok_pp = (s["cfo_correct"] / total_packet * 100) if total_packet else 0.0
+                sto_ok_pp = (s["sto_correct"] / total_packet * 100) if total_packet else 0.0
+                sym_total = true_ + false_
+                sym_acc = (true_ / sym_total * 100) if sym_total else 0.0
+                sym_acc_pp = (true_ / s["symbol_total_sent"] * 100) if s["symbol_total_sent"] else 0.0
+
+                csv_rows.append((snr, total_packet, prem, s["offset_fail"],
+                                 cfo_mae, cfo_ok, cfo_ok_pp,
+                                 sto_mae, sto_ok, sto_ok_pp,
+                                 sym_acc, sym_acc_pp, acc_preamble))
                 print(f"{snr:>5} | {s['true']:>5} | {s['false']:>3} | {acc:>7.2f}% | {prem:>8} | {down:>6} | {acc_total:>7f} | {pre_det:>7} | {total_packet:>4} | {acc_preamble:>7.2f}%")
             # ── Write SNR & DetRate to CSV ────────────────────────────────
             import csv
@@ -66,13 +120,28 @@ def watchdog_loop():
             results_dir.mkdir(exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            csv_path  = results_dir / f"conventional_results_{timestamp}.csv"
+            csv_path  = results_dir / f"conventional_results_{timestamp}_{mode_tag()}.csv"
 
+            # Column set matches main3.py exactly, so results3/ and temp_results/ CSVs
+            # can be overlaid in the same plot. DetRate is appended on the end so the
+            # older plot_results2.ipynb, which only reads SNR + DetRate, still works.
             with open(csv_path, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["SNR", "DetRate"])
-                for snr_val, det_val in csv_rows:
-                    writer.writerow([snr_val, round(det_val, 4)])
+                writer.writerow([
+                    "SNR", "N", "PreambleMissed", "OffsetFail",
+                    "CFO_MAE_Hz", "CFO_SuccessRate", "CFO_SuccessRatePerPacket",
+                    "STO_MAE_samples", "STO_SuccessRate", "STO_SuccessRatePerPacket",
+                    "SymbolAccuracy", "SymbolAccuracyPerPacket",
+                    "DetRate",
+                ])
+                for row in csv_rows:
+                    (snr_val, n_tot, pm, of, c_mae, c_ok, c_ok_pp,
+                     s_mae, s_ok, s_ok_pp, sy_acc, sy_acc_pp, det_val) = row
+                    writer.writerow([snr_val, n_tot, pm, of,
+                                     round(c_mae, 4), round(c_ok, 4), round(c_ok_pp, 4),
+                                     round(s_mae, 4), round(s_ok, 4), round(s_ok_pp, 4),
+                                     round(sy_acc, 4), round(sy_acc_pp, 4),
+                                     round(det_val, 4)])
 
             print(f"\n📄 Results saved to: {csv_path}")
         time.sleep(1)
@@ -113,6 +182,17 @@ def create_stats():
         "downchirp_undetected": 0,
         "Preamble_detected": 0,
         "total_packet": 0,
+        # ── main3.py-compatible counters ──────────────────────────────────────
+        # offset_fail counts ONLY index_payload == -2, unlike downchirp_undetected
+        # above which also absorbs demod length mismatches — keeping them separate
+        # is what makes OffsetFail mean the same thing here as it does in main3.py.
+        "offset_fail": 0,
+        "demod_fail": 0,
+        "cfo_abs_err": [],
+        "sto_abs_err": [],
+        "cfo_correct": 0,
+        "sto_correct": 0,
+        "symbol_total_sent": 0,
     }
 
 GLOBAL_STATS = defaultdict(create_stats)
@@ -136,6 +216,7 @@ def upload():
     snr = data.get("snr") 
     sync_sym = data.get("sync",[8,8])
     no_of_preamble = data.get("preamble",8)
+    payload_symbols_gt = data.get("payload_symbols")
     # Print gateway_id for debugging
     # print("\nReceived from:", gateway_id)
     # print("Received BW:", bw)
@@ -187,6 +268,10 @@ def upload():
         GLOBAL_STATS[snr]["total_packet"] += 1
     else:
         GLOBAL_STATS[snr]["total_packet"] += 1
+
+    # Counted before the early returns below so SymbolAccuracyPerPacket is measured
+    # against everything that was sent, not just the packets that survived.
+    GLOBAL_STATS[snr]["symbol_total_sent"] += len(payload_symbols_gt) if payload_symbols_gt else 10
     
     if index_payload == -1:
         
@@ -198,9 +283,25 @@ def upload():
         
         # GLOBAL_STATS["downchirp_undetected"] += 1
         GLOBAL_STATS[snr]["downchirp_undetected"] += 1
+        GLOBAL_STATS[snr]["offset_fail"] += 1
          
         return jsonify({"status": "fail"}), 400
     framePerSymbol = int(opts.n_classes * (opts.fs / opts.bw))
+
+    # ── Offset-detection accuracy — same metrics and tolerances as main3.py ─────
+    true_cfo = data.get("cfo", 0.0)
+    true_offset = data.get("offset", 0)
+    sto_true = true_fine_sto(true_offset, framePerSymbol)
+    cfo_err = float(cfo - true_cfo)
+    sto_err = float(sto - sto_true)
+    cfo_tol_hz = opts.bw / (2 * opts.n_classes)      # half a frequency bin
+    sto_tol_samples = opts.fs / opts.bw               # ~1 chip
+    GLOBAL_STATS[snr]["cfo_abs_err"].append(abs(cfo_err))
+    GLOBAL_STATS[snr]["sto_abs_err"].append(abs(sto_err))
+    if abs(cfo_err) <= cfo_tol_hz:
+        GLOBAL_STATS[snr]["cfo_correct"] += 1
+    if abs(sto_err) <= sto_tol_samples:
+        GLOBAL_STATS[snr]["sto_correct"] += 1
     payload = np_lora_signal[int(index_payload * framePerSymbol) + (int(sto)):] 
     file_path2 = save_iq_to_disk(payload, dir="proc_iq_signals")
     size_bytes2 = payload.nbytes
@@ -241,24 +342,33 @@ def upload():
         )
 
     ## TESTING AND VALIDATION
-    GT_ = np.array([0,120,0,119,100,100,1,2,3,127])   
+    # Ground truth is whatever the client actually transmitted (random per packet).
+    # The old fixed sequence stays as a fallback so an older client still works.
+    if payload_symbols_gt:
+        GT_ = np.array(payload_symbols_gt)
+    else:
+        GT_ = np.array([0,120,0,119,100,100,1,2,3,127])
     tes_signal = payload
     N = tes_signal.shape[0]
     t = np.arange(N) / fs
     
-    corrected_cfo = tes_signal* np.exp(-1j * 2 * np.pi * cfo * t) ## INI BENER
+    if APPLY_CFO_CORRECTION:
+        corrected_cfo = tes_signal * np.exp(-1j * 2 * np.pi * cfo * t)
+    else:
+        corrected_cfo = tes_signal
     a = calculate_symbol_alliqfile_cropping_technique(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
     #a,_ = calculate_symbol_alliqfile_without_down_sampling(corrected_cfo,opts.sf,opts.bw,opts.fs,show=False)
-    if (len(a) == 11):
+    if (len(a) == len(GT_) + 1):
         a.pop(0)
         diff_count = np.sum(a != GT_)
-    elif (len(a) == 9):            
+    elif (len(a) == len(GT_) - 1):
         GT_ = np.delete(GT_, 0)     # remove it
         diff_count = np.sum(a != GT_)
     elif (len(a) == len(GT_)):
         diff_count = np.sum(a != GT_)
     else:
-        GLOBAL_STATS[snr]["downchirp_undetected"] += 1       
+        GLOBAL_STATS[snr]["downchirp_undetected"] += 1
+        GLOBAL_STATS[snr]["demod_fail"] += 1
         return jsonify({"status": "fail"}), 400
 
     # GLOBAL_STATS["false"] += int(diff_count)
@@ -271,5 +381,6 @@ def upload():
     return jsonify({"status": "success"}), 200
 
 if __name__ == '__main__':
+    print_modes()
     threading.Thread(target=watchdog_loop, daemon=True).start()
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=False) 

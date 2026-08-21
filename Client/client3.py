@@ -137,7 +137,7 @@ if __name__ == "__main__":
         base_opts=opts,
         n_packets=2000,
         cfo_hz_range=(-4358,4584),
-        sto_samp_range=(0, 340),
-        snr_db_range=(-5, 15),
+        sto_samp_range=(0, 0),
+        snr_db_range=(-25, -5),
         seed=-12,
     )
