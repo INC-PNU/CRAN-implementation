@@ -181,7 +181,8 @@ def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
 ## Versi 3 ##
 ## different approach for finding argMax #
 def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint_symbol=None,
-                   precorrect_cfo_frac=True,use_fractional_sto=True,verify_network_id=False,
+                   precorrect_cfo_frac=None,use_fractional_sto=None,verify_network_id=None,
+                   sync_payload_offset_adjust=None,sto_method=None,
                    downchirp_search_radius=1):
     """
     preamble_hint_symbol: optional externally-supplied symbol-frame index (e.g. from a
@@ -193,24 +194,62 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
     downchirp_hint_symbol: optional symbol-frame index of the FIRST down-chirp, supplied
     externally (main3.py derives it from CALoRa's t_end plus the 2 network-id/sync symbols
     that sit between the up-chirps and the down-chirps). When given, the amplitude-threshold
-    scan that hunts for the down-chirp is skipped entirely and STO is solved in closed form
-    from the up/down chirp pair instead of by cross-correlation — see MODUL STO V3 below.
-    Both hints default to None, so main.py's own call is unaffected.
+    scan that hunts for the down-chirp is skipped entirely — see downchirp_search_radius.
 
-    The four switches below are experiment toggles for the CALoRa path only (they are
-    ignored when downchirp_hint_symbol is None, so main.py keeps its behavior either way).
-    Their defaults are the measured-best configuration; main3.py exposes them at the top
-    of the file so a sweep can be re-run with any of them flipped:
+    The five switches below used to be wired to only ever take effect on the CALoRa
+    (hint) path, with the classical (no-hint) path hardcoding an equivalent-but-distinct
+    behavior with no way to override it — meaning "switch preamble detection method"
+    silently changed the offset-correction behavior too, not just the thing it located.
+    They are now unified: every one of them takes effect identically on both paths, and
+    the *_sentinel default (None) resolves to whatever value reproduces that path's
+    original hardcoded behavior — so an unmodified call (e.g. main.py's own
+    detect_cfo_sto(opts, LoRa, np_lora_signal), no hint, no explicit toggle) is
+    byte-for-byte unaffected by this change, while a caller that wants a true
+    single-variable comparison (only the preamble-locating method differs) can now pass
+    the same explicit toggle set regardless of which path located the packet:
 
-      precorrect_cfo_frac     remove the fractional CFO from the signal before the FFT
-                              peaks are read. Off -> it leaks into STO as up to ±0.5 chip.
-      use_fractional_sto      add shift_sto_index, the sub-chip STO refinement.
-                              Off -> STO is quantised to whole chips (fs/bw samples).
-      verify_network_id       decode the 2 sync symbols and reject the packet if neither
-                              matches opts.sync_sym. Off -> no rejection (the down-chirp
-                              search already resolves which down-chirp we are on).
-      downchirp_search_radius how many frames either side of the hint to search.
+      precorrect_cfo_frac      remove the fractional CFO from the signal before the FFT
+                               peaks are read. Off -> it leaks into STO as up to ±0.5
+                               chip. Default: on with a hint, off without (matches the
+                               no-hint path's original behavior, which never had this).
+      use_fractional_sto       add shift_sto_index, the sub-chip STO refinement. Off ->
+                               STO is quantised to whole chips (fs/bw samples). Only
+                               meaningful under sto_method="v3". Default: on with a hint.
+      verify_network_id        decode the 2 sync symbols and reject the packet (-2) if
+                               neither matches opts.sync_sym. Default: on WITHOUT a hint
+                               (the original no-hint path always rejected on a total
+                               mismatch), off with a hint (the original hint path never
+                               checked this).
+      sync_payload_offset_adjust  after decoding the sync symbols, shift the payload
+                               index by +0 or +1 depending on which one matched, clamped
+                               at >15. Default: on without a hint (original behavior),
+                               off with a hint (the hint path always assumed the +1 case
+                               and skipped decoding for it — see below).
+      sto_method               "v1" (cross-correlation lag) or "v3" (closed-form from the
+                               up/down chirp pair). Default: "v1" without a hint, "v3"
+                               with one — both methods' required inputs are computed
+                               unconditionally above this point, so either can be forced
+                               on either path.
+      downchirp_search_radius  how many frames either side of the hint to search.
+                               Hint-only — meaningless without a hint, no sentinel.
+
+    One honest caveat: unifying the sync-symbol decode onto one shared code path picks up
+    the hint path's bounds/length guards (a negative slice start, or a short slice at the
+    very start of the buffer) on the no-hint path too, where they didn't exist before —
+    that previously-uncaught edge case now returns -2 instead of raising. This only
+    changes behavior on a path that would not otherwise have succeeded.
     """
+    has_hint = downchirp_hint_symbol is not None
+    if precorrect_cfo_frac is None:
+        precorrect_cfo_frac = has_hint
+    if use_fractional_sto is None:
+        use_fractional_sto = has_hint
+    if verify_network_id is None:
+        verify_network_id = not has_hint
+    if sync_payload_offset_adjust is None:
+        sync_payload_offset_adjust = not has_hint
+    if sto_method is None:
+        sto_method = "v3" if has_hint else "v1"
 
     THRESHOLD_FOR_PREAMBLE_DETECTION = 0.625
     factor = 1.4
@@ -342,7 +381,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
    
     correction_factor_by_cfo_frac = np.exp(-1j * 2 * np.pi * (CFO_FRAC_estimation)* t)
     
-    if downchirp_hint_symbol is not None and precorrect_cfo_frac:
+    if precorrect_cfo_frac:
         # VERSI 1.1 — take the fractional CFO off the signal BEFORE the peaks are measured.
         # Estimating it is not enough on its own: left in place, the dechirped tone sits at
         # (CFO_int + CFO_frac + N - STO_int) bins, so the sub-bin lean of the peak carries
@@ -352,7 +391,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         up_frame = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac
         down_frame = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_frac
     else:
-        #VERSI 1.1 (see above) is kept off here so main.py's behavior is unchanged.
+        #VERSI 1.1 (see above) off — matches the no-hint path's original behavior by default.
         up_frame = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol]
         down_frame = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol]
 
@@ -487,7 +526,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
     # print("CFO FIn al:",CFO_FINAL)
     correction_factor_by_cfo_total = np.exp(-1j * 2 * np.pi * ( cfo_test_boleh_delete_soon)* t)
 
-    if downchirp_hint_symbol is not None:
+    if sto_method == "v3":
         ################### MODUL STO V3 (closed form, up/down chirp pair) ###############
         # The same two dechirped peaks that gave CFO also give STO. With the base up-chirp
         # B[k] = exp(j2pi(k^2/2N - k/2)), the preamble up-chirp and the down-chirp carry the
@@ -525,52 +564,40 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         ################### MODUL STO V1 Better so far ###################################
 
     ################## SYNC detection #############################
-    if downchirp_hint_symbol is not None:
-        # No network-id decode on the CALoRa path. The only thing it decided was whether the
-        # scan had landed on the first or the second down-chirp, and the candidate search
-        # above already settles that structurally. Its other effect was to reject the packet
-        # outright, and that is exactly what made it harmful: reading a sync symbol needs a
-        # full symbol demodulation, which falls apart at low SNR long before locating a
-        # down-chirp does — so it was throwing away packets whose CFO/STO were perfectly
-        # good. The payload simply sits 2.25 frames past the first down-chirp.
-        global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 2.25
+    # Unified base: this is the no-hint path's original literal base (down_chirp + 1.25).
+    # The hint path's original fixed target of +2.25 is reproduced below as base+1 exactly
+    # when sync_payload_offset_adjust is off (its own default with a hint) — see that branch.
+    global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25
 
-        if verify_network_id:
-            # Opt-in guard. Unlike the conventional branch below it only ever REJECTS —
-            # the payload index above comes from the structural down-chirp pick, so there
-            # is nothing left for a sync decode to disambiguate. Turning this on is how you
-            # reproduce the conventional path's rejection behavior on the CALoRa path.
-            sto = int(lag_samples)
-            i_down = int(global_index_that_start_a_down_chirp) - 1
-            i_down_2 = i_down - 1
-            start_1 = (i_down) * framePerSymbol + sto
-            start_2 = (i_down_2) * framePerSymbol + sto
-            if start_2 < 0:
-                return -2, None, None, preamble_found
-            sync_frame_1 = rx_samples[start_1:start_1 + framePerSymbol] * correction_factor_by_cfo_total
-            sync_frame_2 = rx_samples[start_2:start_2 + framePerSymbol] * correction_factor_by_cfo_total
-            if len(sync_frame_1) != framePerSymbol or len(sync_frame_2) != framePerSymbol:
-                return -2, None, None, preamble_found
-            symbol_sync_1, _ = estimate_symbol(opts, LoRa, sync_frame_1)
-            symbol_sync_2, _ = estimate_symbol(opts, LoRa, sync_frame_2)
-            if (symbol_sync_1 not in opts.sync_sym) and (symbol_sync_2 not in opts.sync_sym):
-                return -2, None, None, preamble_found
-    else:
-        # Find the exact index that match the Sync Symbol
-        # That index will be reference index to know when to start a payload
-        i_down = int(global_index_that_start_a_down_chirp) - 1 #1
-        # print("down",global_index_that_start_a_down_chirp)
-        i_down_2 = i_down - 1
-        sto = int(lag_samples)
+    i_down = int(global_index_that_start_a_down_chirp) - 1
+    i_down_2 = i_down - 1
+    sto = int(lag_samples)
 
-        dechirped_sync_1 = rx_samples[(i_down)*framePerSymbol + sto:(i_down)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total
-        dechirped_sync_2 = rx_samples[(i_down_2)*framePerSymbol + sto:(i_down_2)*framePerSymbol + framePerSymbol +sto] * correction_factor_by_cfo_total
+    symbol_sync_1 = symbol_sync_2 = None
+    if verify_network_id or sync_payload_offset_adjust:
+        # Decoding the 2 network-id/sync symbols needs a full symbol demodulation, which
+        # falls apart at low SNR long before locating a down-chirp does — so this whole
+        # block is skipped entirely (both toggles off) rather than risk throwing away a
+        # packet whose CFO/STO are otherwise fine, exactly as the CALoRa path always has.
+        start_1 = i_down * framePerSymbol + sto
+        start_2 = i_down_2 * framePerSymbol + sto
+        if start_2 < 0:
+            return -2, None, None, preamble_found
+        sync_frame_1 = rx_samples[start_1:start_1 + framePerSymbol] * correction_factor_by_cfo_total
+        sync_frame_2 = rx_samples[start_2:start_2 + framePerSymbol] * correction_factor_by_cfo_total
+        if len(sync_frame_1) != framePerSymbol or len(sync_frame_2) != framePerSymbol:
+            return -2, None, None, preamble_found
+        symbol_sync_1, _ = estimate_symbol(opts, LoRa, sync_frame_1)
+        symbol_sync_2, _ = estimate_symbol(opts, LoRa, sync_frame_2)
 
-        symbol_sync_1,_ = estimate_symbol(opts,LoRa, dechirped_sync_1)
-        symbol_sync_2,_ = estimate_symbol(opts,LoRa, dechirped_sync_2)
+    if verify_network_id:
+        # Reject-only: matches the no-hint path's original unconditional "neither sync
+        # symbol matched" rejection, now also available (opt-in) on the hint path.
+        if (symbol_sync_1 not in opts.sync_sym) and (symbol_sync_2 not in opts.sync_sym):
+            return -2, None, None, preamble_found
 
+    if sync_payload_offset_adjust:
         if (symbol_sync_1 == opts.sync_sym[1]):
-
             global_index_that_start_a_payload += 1
         elif (symbol_sync_1 == opts.sync_sym[0]):
             global_index_that_start_a_payload -= 0
@@ -578,11 +605,16 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
             global_index_that_start_a_payload -= 0
         elif (symbol_sync_2 == opts.sync_sym[0]):
             global_index_that_start_a_payload += 1
-        else:
-            global_index_that_start_a_payload += 1
-            return -2,None,None,preamble_found
+        # else: leave the base offset as-is. (When verify_network_id is also on, this
+        # branch is unreachable — a total mismatch already returned -2 above. When
+        # verify_network_id is off, a total mismatch here is a deliberately permissive
+        # config, not an error, so it falls through rather than rejecting.)
         if (global_index_that_start_a_payload > 15):
-            global_index_that_start_a_payload -=1
+            global_index_that_start_a_payload -= 1
+    else:
+        # Reproduces the hint path's original fixed +2.25 target (base 1.25 + 1) without
+        # needing a decode — this is that path's default when the adjustment is off.
+        global_index_that_start_a_payload += 1
     ################## SYNC detection #############################
 
     return global_index_that_start_a_payload,CFO_FINAL,lag_samples,preamble_found

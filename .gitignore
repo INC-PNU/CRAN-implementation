@@ -3,14 +3,66 @@ __pycache__/
 *.py[codz]
 *$py.class
 
-*.pdf
-*.PNG
-*.csv 
-*.npy
+# ---------------------------------------------------------------------------
+# Project-specific: keep large binaries out of git
+#
+# NOTE: these patterns only stop NEW files from being added. Files that are
+# already tracked stay tracked no matter what is listed here — untrack them
+# first with `git rm --cached --`, then commit. As of this writing that applies
+# to ~805 MB of model checkpoints under */models/**/checkpoints/, which were
+# committed before these patterns existed.
+#
+# Do NOT ignore the checkpoint DIRECTORIES themselves: readme.md / *.txt result
+# notes live inside them and are meant to stay tracked. Git cannot re-include a
+# file whose parent directory is excluded, so extension patterns are used here.
+# ---------------------------------------------------------------------------
+
+# Model weights / serialized objects
 *.pkl
 *.pth
 *.pt
+*.ckpt
+*.safetensors
+*.onnx
+*.pb
+*.tflite
+*.joblib
+
+# Datasets, IQ captures, intermediate arrays
+*.npy
+*.npz
+*.mat
+*.h5
+*.hdf5
+*.iq
+*.raw
+*.sigmf-data
+*.sigmf-meta
+*.wav
+*.bin
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.7z
+*.rar
+
+# Generated results / figures
+*.csv
+*.pdf
+*.png
+*.PNG
+*.jpg
+*.jpeg
+
+# Generated run output
 **/storage/
+**/temp_results/
+Server/dashboard_runs/
+
 **/__pycache__/
 # C extensions
 *.so

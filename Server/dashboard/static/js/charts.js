@@ -1,0 +1,154 @@
+// Chart.js setup + rendering. Charts are created once and updated in place via
+// chart.update() on every poll (never destroyed/recreated) so Chart.js's own animation
+// carries old->new positions smoothly instead of a jarring redraw.
+
+export const PALETTE = [
+  "#2a78d6", "#eb6834", "#1baf7a", "#eda100",
+  "#e87ba4", "#008300", "#4a3aa7", "#d03b3b",
+];
+export const MAX_OVERLAY_RUNS = PALETTE.length;
+
+const COLOR_KEY = "lora_dashboard_run_colors";
+
+function loadColorMap() {
+  try {
+    return JSON.parse(localStorage.getItem(COLOR_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveColorMap(map) {
+  try {
+    localStorage.setItem(COLOR_KEY, JSON.stringify(map));
+  } catch {
+    /* private browsing / storage disabled — color assignment just won't persist */
+  }
+}
+
+// Assigned by first-selected order, persisted, never recycled on deselect — so a run
+// keeps its color across the session and unchecking one run never repaints the others.
+export function assignColor(runId) {
+  const map = loadColorMap();
+  if (map[runId] !== undefined) return PALETTE[map[runId] % PALETTE.length];
+  const used = new Set(Object.values(map));
+  let slot = 0;
+  while (used.has(slot) && slot < PALETTE.length) slot++;
+  if (slot >= PALETTE.length) slot = Object.keys(map).length % PALETTE.length;
+  map[runId] = slot;
+  saveColorMap(map);
+  return PALETTE[slot];
+}
+
+function pct(numerator, denominator) {
+  return denominator ? (numerator / denominator) * 100 : null;
+}
+
+// Raw bins[] -> per-metric {snr: value} for the given scope. Both scopes are always
+// derivable from the same raw counts, so switching scope needs zero network requests.
+export function computeSeries(bins, scope) {
+  const out = { preamble: {}, cfo: {}, sto: {}, symbol: {}, n: {} };
+  for (const b of bins) {
+    const reached = b.n_total - b.preamble_missed - b.offset_fail;
+    out.preamble[b.snr_db] = pct(b.n_total - b.preamble_missed, b.n_total);
+    out.n[b.snr_db] = b.n_total;
+    if (scope === "conditioned") {
+      out.cfo[b.snr_db] = pct(b.cfo_correct, reached);
+      out.sto[b.snr_db] = pct(b.sto_correct, reached);
+      out.symbol[b.snr_db] = pct(b.symbol_correct, b.symbol_total);
+    } else {
+      out.cfo[b.snr_db] = pct(b.cfo_correct, b.n_total);
+      out.sto[b.snr_db] = pct(b.sto_correct, b.n_total);
+      out.symbol[b.snr_db] = pct(b.symbol_correct, b.symbol_total_sent);
+    }
+  }
+  return out;
+}
+
+function lineDataset(run, values, snrLabels) {
+  return {
+    label: run.label,
+    data: snrLabels.map((s) => (values[s] === undefined ? null : values[s])),
+    borderColor: run.color,
+    backgroundColor: run.color,
+    borderDash: run.dashed ? [6, 4] : [],
+    spanGaps: true,
+    tension: 0.15,
+    pointRadius: 3,
+  };
+}
+
+function makeLineChart(canvasId, yLabel) {
+  const ctx = document.getElementById(canvasId).getContext("2d");
+  return new Chart(ctx, {
+    type: "line",
+    data: { labels: [], datasets: [] },
+    options: {
+      responsive: true,
+      animation: { duration: 250 },
+      scales: {
+        x: { title: { display: true, text: "SNR (dB)" } },
+        y: { title: { display: true, text: yLabel }, min: 0, max: 100 },
+      },
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            afterLabel(item) {
+              const n = item.chart._nCounts?.[item.datasetIndex]?.[item.dataIndex];
+              return n !== undefined ? `N=${n}` : "";
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+export function createCharts() {
+  return {
+    preamble: makeLineChart("chart-preamble", "Detection rate (%)"),
+    cfo: makeLineChart("chart-cfo", "Success rate (%)"),
+    sto: makeLineChart("chart-sto", "Success rate (%)"),
+    symbol: makeLineChart("chart-symbol", "Accuracy (%)"),
+    nbin: new Chart(document.getElementById("chart-nbin").getContext("2d"), {
+      type: "bar",
+      data: { labels: [], datasets: [] },
+      options: {
+        responsive: true,
+        animation: { duration: 250 },
+        scales: {
+          x: { title: { display: true, text: "SNR (dB)" } },
+          y: { title: { display: true, text: "Packets" }, beginAtZero: true },
+        },
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+      },
+    }),
+  };
+}
+
+// runs: array of {runId, label, color, bins, dashed}
+export function updateCharts(charts, runs, scope) {
+  const snrSet = new Set();
+  const seriesPerRun = runs.map((r) => ({ run: r, series: computeSeries(r.bins, scope) }));
+  for (const { series } of seriesPerRun) {
+    Object.keys(series.preamble).forEach((s) => snrSet.add(Number(s)));
+  }
+  const snrLabels = [...snrSet].sort((a, b) => a - b);
+
+  for (const key of ["preamble", "cfo", "sto", "symbol"]) {
+    const chart = charts[key];
+    chart.data.labels = snrLabels;
+    chart.data.datasets = seriesPerRun.map(({ run, series }) => lineDataset(run, series[key], snrLabels));
+    chart._nCounts = seriesPerRun.map(({ series }) => snrLabels.map((s) => series.n[s]));
+    chart.update();
+  }
+
+  charts.nbin.data.labels = snrLabels;
+  charts.nbin.data.datasets = seriesPerRun.map(({ run, series }) => ({
+    label: run.label,
+    data: snrLabels.map((s) => series.n[s] ?? 0),
+    backgroundColor: run.color,
+  }));
+  charts.nbin.update();
+}

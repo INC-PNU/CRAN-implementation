@@ -1194,3 +1194,63 @@ def calculate_symbol_alliqfile_cropping_technique(data,sf,bw,sample_rate,show=Tr
 
 
     return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Vendored from Client/utils/my_lora_utils.py for the dashboard's in-process packet
+# generator. Not imported cross-tree: Server/utils and Client/utils are both top-level
+# packages literally named `utils` with no __init__.py in either, so a sys.path trick
+# would silently resolve to whichever `utils` module Python already cached under that
+# name, not the intended one. This matches the repo's existing convention of
+# independently duplicating LoRa.py/my_lora_utils.py between Client and Server. If
+# Client/utils/my_lora_utils.py's originals ever change, diff against them here.
+# ─────────────────────────────────────────────────────────────────────────────
+def create_lora_preamble(opts, lora):
+    lora_f = lora(opts.sf, opts.bw)
+
+    up_chirp = lora_f.gen_symbol_fs(0, down=False, Fs=opts.fs)
+    down_chirp = np.conjugate(up_chirp)
+    sync_symbol = lora_f.gen_symbol_fs(8, down=False, Fs=opts.fs)
+
+    partial_down_chirp = down_chirp[: len(down_chirp) // 4]
+
+    preamble = np.concatenate([
+        np.tile(up_chirp, 8),
+        np.tile(sync_symbol, 2),
+        np.tile(down_chirp, 2),
+        partial_down_chirp
+    ])
+    return preamble
+
+
+def create_8_down(opts, lora):
+    lora_f = lora(opts.sf, opts.bw)
+    up_chirp = lora_f.gen_symbol_fs(0, down=False, Fs=opts.fs)
+    down_chirp = np.conjugate(up_chirp)
+    preamble = np.concatenate([
+        np.tile(down_chirp, 8)
+    ])
+    return preamble
+
+
+def create_lora_payload(opts, lora, symbol_sequence):
+    all_symbols = []
+    lora_f = lora(opts.sf, opts.bw)
+    window_length = int(opts.n_classes * (opts.fs / opts.bw))
+    for symbol in symbol_sequence:
+        if symbol < 0 or symbol > opts.n_classes:
+            sym_wave = np.random.rand(window_length)
+        else:
+            sym_wave = lora_f.gen_symbol_fs(symbol, down=False, Fs=opts.fs)
+
+        all_symbols.append(sym_wave)
+
+    tx_signal = np.concatenate(all_symbols)
+    return tx_signal
+
+
+def add_cfo(opts, signal, cfo_hz):
+    n = np.arange(len(signal))
+    t = n / opts.fs
+    rot = np.exp(1j * 2 * np.pi * cfo_hz * t).astype(signal.dtype)
+    return signal * rot

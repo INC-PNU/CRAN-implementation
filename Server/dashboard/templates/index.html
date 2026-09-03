@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LoRa Playground Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>LoRa Playground Dashboard</h1>
+  <div id="header-status" class="header-status"></div>
+</header>
+
+<div class="app-layout">
+  <aside class="sidebar">
+    <form id="config-form">
+      <fieldset>
+        <legend>Client &mdash; packet generation</legend>
+
+        <label>Spreading factor
+          <input type="number" id="sf" value="7" disabled title="SF8+ not yet supported by CALoRa/NeLoRa">
+        </label>
+        <label>Bandwidth (Hz)
+          <input type="number" id="bw" value="125000" step="1000" required>
+        </label>
+        <label>Sample rate (Hz)
+          <input type="number" id="fs" value="1000000" step="1000" required>
+        </label>
+        <label>Packets
+          <input type="number" id="n_packets" value="500" min="1" required>
+        </label>
+
+        <div class="range-row">
+          <span class="range-label">CFO range (Hz)</span>
+          <input type="number" id="cfo_lo" value="-4358" required>
+          <input type="number" id="cfo_hi" value="4584" required>
+        </div>
+        <div class="range-row">
+          <span class="range-label">STO range (samples)</span>
+          <input type="number" id="sto_lo" value="0" required>
+          <input type="number" id="sto_hi" value="50" required>
+        </div>
+        <div class="range-row">
+          <span class="range-label">SNR range (dB)</span>
+          <input type="number" id="snr_lo" value="-25" required>
+          <input type="number" id="snr_hi" value="-5" required>
+        </div>
+        <p id="packets-per-bin-hint" class="hint"></p>
+
+        <label>Seed <span class="hint-inline">(-1 = random)</span>
+          <input type="number" id="seed" value="-1">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Server &mdash; detection &amp; correction</legend>
+
+        <label>Preamble detection
+          <select id="preamble_detection_method">
+            <option value="conventional">Conventional</option>
+            <option value="calora">CALoRa (neural)</option>
+          </select>
+        </label>
+        <label id="calora-checkpoint-row" hidden>CALoRa checkpoint
+          <select id="calora_checkpoint"></select>
+        </label>
+
+        <label>Symbol decoding
+          <select id="symbol_decoding_method">
+            <option value="conventional">Conventional (dechirp)</option>
+            <option value="nelora" id="nelora-option">NeLoRa (neural)</option>
+          </select>
+        </label>
+
+        <label class="checkbox"><input type="checkbox" id="apply_cfo_correction" checked> Apply CFO correction</label>
+        <label class="checkbox"><input type="checkbox" id="apply_sto_correction" checked> Apply STO correction</label>
+
+        <details class="advanced">
+          <summary>Advanced estimator settings</summary>
+          <p class="hint">Defaults follow the selected preamble detection method (see
+             Server/utils/helper_function.py's detect_cfo_sto) &mdash; changing one here
+             pins it, so switching methods afterward won't silently reset it.</p>
+          <!-- Static defaults below match "Conventional" (the method dropdown's own
+               default) so first paint isn't wrong before app.js's applyMethodDefaults()
+               runs; that function re-applies the correct set per method afterward. -->
+          <label class="checkbox"><input type="checkbox" id="precorrect_cfo_frac"> Precorrect fractional CFO</label>
+          <label class="checkbox"><input type="checkbox" id="use_fractional_sto"> Use fractional STO refinement</label>
+          <label class="checkbox"><input type="checkbox" id="verify_network_id" checked> Verify network ID (reject on mismatch)</label>
+          <label class="checkbox"><input type="checkbox" id="sync_payload_offset_adjust" checked> Sync-based payload offset adjust</label>
+          <label>STO method
+            <select id="sto_method">
+              <option value="v1">v1 (cross-correlation)</option>
+              <option value="v3">v3 (closed-form)</option>
+            </select>
+          </label>
+          <label>Down-chirp search radius
+            <input type="number" id="downchirp_search_radius" value="1" min="0" max="3">
+          </label>
+        </details>
+      </fieldset>
+
+      <div class="run-buttons">
+        <button type="submit" id="start-btn">Start Sweep</button>
+        <button type="button" id="cancel-btn" hidden>Cancel Run</button>
+      </div>
+      <p id="form-error" class="form-error" hidden></p>
+    </form>
+  </aside>
+
+  <main class="main-area">
+    <div class="control-bar">
+      <div class="scope-toggle" role="group" aria-label="Metric scope">
+        <button type="button" class="scope-btn active" data-scope="per_packet">Per-packet</button>
+        <button type="button" class="scope-btn" data-scope="conditioned">Conditioned</button>
+      </div>
+      <div id="progress-meter" class="progress-meter" hidden>
+        <div class="meter-track"><div class="meter-fill" id="meter-fill"></div></div>
+        <span id="progress-text"></span>
+      </div>
+      <details id="diagnostics-details">
+        <summary>Run diagnostics</summary>
+        <table id="diagnostics-table"><thead>
+          <tr><th>Run</th><th>N</th><th>Preamble miss %</th><th>Offset fail %</th><th>Reached</th></tr>
+        </thead><tbody></tbody></table>
+      </details>
+    </div>
+
+    <div id="warning-banner" class="warning-banner" hidden></div>
+
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Preamble Detection Rate</h3><canvas id="chart-preamble"></canvas></div>
+      <div class="chart-card"><h3>CFO Success Rate</h3><canvas id="chart-cfo"></canvas></div>
+      <div class="chart-card"><h3>STO Success Rate</h3><canvas id="chart-sto"></canvas></div>
+      <div class="chart-card"><h3>Symbol Decoding Accuracy</h3><canvas id="chart-symbol"></canvas></div>
+    </div>
+    <div class="chart-card chart-card-wide">
+      <h3>Packets per SNR bin</h3>
+      <canvas id="chart-nbin"></canvas>
+    </div>
+
+    <div class="chart-card chart-card-wide" id="raw-data-card">
+      <div class="raw-data-header">
+        <h3>Raw data</h3>
+        <div class="raw-data-controls">
+          <select id="raw-data-run-select"></select>
+          <button type="button" id="raw-data-copy-btn" class="btn-small">Copy as TSV</button>
+          <a id="raw-data-download" class="btn-small btn-link" href="#" download>Download CSV</a>
+        </div>
+      </div>
+      <p class="hint">CFO/STO/Symbol % columns follow the Per-packet / Conditioned toggle above. Raw counts are always exact.</p>
+      <div class="table-scroll">
+        <table id="raw-data-table">
+          <thead>
+            <tr>
+              <th>SNR</th><th>N</th><th>PreMiss</th><th>OffFail</th><th>DemodFail</th>
+              <th>CFO ok</th><th>CFO MAE (Hz)</th>
+              <th>STO ok</th><th>STO MAE (samp)</th>
+              <th>Sym correct/total</th><th>Sym %</th>
+            </tr>
+          </thead>
+          <tbody id="raw-data-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<section class="history-section">
+  <h2>Past Runs</h2>
+  <table id="history-table">
+    <thead>
+      <tr><th></th><th>Label</th><th>Started</th><th>Config</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody id="history-body"></tbody>
+  </table>
+</section>
+
+<script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
