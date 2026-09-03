@@ -49,8 +49,16 @@ function pct(numerator, denominator) {
 export function computeSeries(bins, scope) {
   const out = { preamble: {}, cfo: {}, sto: {}, symbol: {}, n: {} };
   for (const b of bins) {
-    const reached = b.n_total - b.preamble_missed - b.offset_fail;
-    out.preamble[b.snr_db] = pct(b.n_total - b.preamble_missed, b.n_total);
+    // ?? 0: manifests written before preamble_mislocated existed lack the field, and
+    // read back as the old (inflated) behaviour rather than NaN.
+    const mislocated = b.preamble_mislocated ?? 0;
+    // "Detected" requires landing within tolerance of the true preamble, not merely
+    // answering yes. CALoRa's detector cannot answer no at all (argmax over sliding
+    // windows + a confidence gate its probability floor never trips), so without this
+    // term its rate read ~100% down to -40 dB.
+    const located = b.n_total - b.preamble_missed - mislocated;
+    const reached = located - b.offset_fail;
+    out.preamble[b.snr_db] = pct(located, b.n_total);
     out.n[b.snr_db] = b.n_total;
     if (scope === "conditioned") {
       out.cfo[b.snr_db] = pct(b.cfo_correct, reached);

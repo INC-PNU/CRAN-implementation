@@ -10,8 +10,11 @@ directly; no separate index database, matching this project's scale (one local u
 dozens-hundreds of runs).
 """
 import csv
+import io
 import json
 import shutil
+import threading
+import time
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
@@ -19,6 +22,52 @@ from datetime import datetime, timezone
 RUNS_DIR = Path(__file__).resolve().parents[1] / "dashboard_runs"
 
 SCHEMA_VERSION = 1
+
+# Windows-only hazard, but it bites this app hard. CPython opens files without
+# FILE_SHARE_DELETE, so while any thread has manifest.json open for reading,
+# os.replace() onto it fails with PermissionError [WinError 5], and the reader can
+# itself fail with [Errno 13]. The dashboard polls GET /api/runs every 2 s, and
+# list_manifests() reads *every* run's manifest on each poll, while the worker thread
+# writes the live run's manifest — so the two genuinely collide. Before this, one such
+# collision raised straight out of _publish and killed the run thread mid-sweep.
+#
+# Every reader and writer of these files lives in the one Flask process, so the fix is
+# to serialize them here: a reader never holds a handle while a replace runs. Retrying
+# alone is NOT sufficient — measured with readers spinning flat out, 7 of 9 writes still
+# exhausted the retry budget, because a saturating reader keeps a handle open almost
+# continuously. The lock removes that contention outright; _with_retry then only has to
+# cover what the lock cannot see (antivirus, Explorer preview, a second dashboard
+# process), which is brief and rare.
+_FILE_LOCK = threading.RLock()
+
+_RETRY_DELAYS = (0.005, 0.01, 0.02, 0.04, 0.08, 0.15, 0.15, 0.15, 0.15, 0.15)
+
+
+def _with_retry(op):
+    """Run op(), retrying transient Windows sharing failures. Re-raises if they persist
+    past ~0.9 s total, which would mean a real permissions problem, not contention."""
+    for delay in _RETRY_DELAYS:
+        try:
+            return op()
+        except PermissionError:
+            time.sleep(delay)
+    return op()
+
+
+def _atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
+    """Write via a uniquely-named sibling tmp + atomic replace. The tmp name carries a
+    random suffix so two concurrent writers never share one (a fixed 'foo.tmp' lets one
+    truncate the other's half-written file, then one replace hits a vanished source)."""
+    tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+    tmp.write_text(text, encoding=encoding)
+    try:
+        _with_retry(lambda: tmp.replace(path))  # atomic on POSIX and Windows (same volume)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass  # best-effort cleanup; the original error is the one worth reporting
+        raise
 
 
 def _now() -> str:
@@ -85,16 +134,25 @@ def create_manifest(run_id: str, client_config: dict, server_config: dict, label
 def write_manifest(run_id: str, manifest: dict) -> None:
     d = run_dir(run_id)
     d.mkdir(parents=True, exist_ok=True)
-    tmp = d / "manifest.json.tmp"
-    tmp.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    tmp.replace(d / "manifest.json")  # atomic on both POSIX and Windows (same volume)
+    payload = json.dumps(manifest, indent=2)
+    with _FILE_LOCK:
+        _atomic_write_text(d / "manifest.json", payload)
 
 
 def read_manifest(run_id: str) -> dict | None:
     path = run_dir(run_id) / "manifest.json"
-    if not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
+
+    def _read():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            # Also covers the run being deleted between check and read — no TOCTOU gap.
+            return None
+
+    # Held only for the duration of one small read, so a poll that walks every run
+    # (list_manifests) yields the lock back to the worker between manifests.
+    with _FILE_LOCK:
+        return _with_retry(_read)
 
 
 def list_manifests() -> list[dict]:
@@ -111,14 +169,23 @@ def list_manifests() -> list[dict]:
 
 def delete_run(run_id: str) -> bool:
     d = run_dir(run_id)
-    if not d.exists():
-        return False
-    shutil.rmtree(d)
-    return True
+    # Same lock as the readers: rmtree racing a poll's read_manifest would otherwise
+    # fail on Windows with the directory "in use".
+    with _FILE_LOCK:
+        if not d.exists():
+            return False
+        shutil.rmtree(d)
+        return True
 
 
 def _bin_percentages(b: dict) -> dict:
-    reached = b["n_total"] - b["preamble_missed"] - b["offset_fail"]
+    # .get(): manifests written before preamble_mislocated existed have no such key. They
+    # read back as 0, i.e. exactly the old behaviour, so old runs still render — but their
+    # preamble rate remains the inflated pre-fix number and is NOT comparable with runs
+    # recorded after this change.
+    mislocated = b.get("preamble_mislocated", 0)
+    located = b["n_total"] - b["preamble_missed"] - mislocated
+    reached = located - b["offset_fail"]
     return {
         "cfo_success_rate_conditioned_pct": (b["cfo_correct"] / reached * 100) if reached else 0.0,
         "cfo_success_rate_per_packet_pct": (b["cfo_correct"] / b["n_total"] * 100) if b["n_total"] else 0.0,
@@ -126,7 +193,10 @@ def _bin_percentages(b: dict) -> dict:
         "sto_success_rate_per_packet_pct": (b["sto_correct"] / b["n_total"] * 100) if b["n_total"] else 0.0,
         "symbol_accuracy_conditioned_pct": (b["symbol_correct"] / b["symbol_total"] * 100) if b["symbol_total"] else 0.0,
         "symbol_accuracy_per_packet_pct": (b["symbol_correct"] / b["symbol_total_sent"] * 100) if b["symbol_total_sent"] else 0.0,
-        "preamble_detection_rate_pct": ((b["n_total"] - b["preamble_missed"]) / b["n_total"] * 100) if b["n_total"] else 0.0,
+        # "Detected" now requires landing in the right place, not merely answering yes.
+        "preamble_detection_rate_pct": (located / b["n_total"] * 100) if b["n_total"] else 0.0,
+        # The old definition, kept so a pre-fix run can still be reproduced from a CSV.
+        "preamble_answered_yes_pct": ((b["n_total"] - b["preamble_missed"]) / b["n_total"] * 100) if b["n_total"] else 0.0,
     }
 
 
@@ -138,18 +208,25 @@ def export_per_snr_csv(run_id: str) -> Path:
         raise FileNotFoundError(run_id)
 
     path = run_dir(run_id) / "per_snr.csv"
-    raw_cols = ["snr_db", "n_total", "preamble_missed", "offset_fail", "demod_fail",
+    raw_cols = ["snr_db", "n_total", "preamble_missed", "preamble_mislocated",
+                "offset_fail", "demod_fail",
                 "cfo_correct", "sto_correct", "cfo_mae_hz", "sto_mae_samples",
                 "symbol_total", "symbol_correct", "symbol_total_sent"]
-    pct_cols = ["preamble_detection_rate_pct",
+    pct_cols = ["preamble_detection_rate_pct", "preamble_answered_yes_pct",
                 "cfo_success_rate_conditioned_pct", "cfo_success_rate_per_packet_pct",
                 "sto_success_rate_conditioned_pct", "sto_success_rate_per_packet_pct",
                 "symbol_accuracy_conditioned_pct", "symbol_accuracy_per_packet_pct"]
 
-    with open(path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(raw_cols + pct_cols)
-        for b in sorted(manifest["bins"], key=lambda x: x["snr_db"]):
-            pct = _bin_percentages(b)
-            writer.writerow([b.get(c) for c in raw_cols] + [round(pct[c], 4) for c in pct_cols])
+    # Built in memory then written atomically: GET /api/runs/<id>/export.csv regenerates
+    # this file and hands it to send_file(), which streams it — so a run completing at
+    # that moment must not be rewriting the same path underneath the stream.
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(raw_cols + pct_cols)
+    for b in sorted(manifest["bins"], key=lambda x: x["snr_db"]):
+        pct = _bin_percentages(b)
+        writer.writerow([b.get(c) for c in raw_cols] + [round(pct[c], 4) for c in pct_cols])
+
+    with _FILE_LOCK:
+        _atomic_write_text(path, buf.getvalue())
     return path

@@ -400,7 +400,7 @@ function renderRawDataTable(runs) {
     select.hidden = true;
     download.hidden = true;
     copyBtn.hidden = true;
-    tbody.innerHTML = `<tr><td colspan="11" id="raw-data-empty">No run selected — check a run below to see its numbers here.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" id="raw-data-empty">No run selected — check a run below to see its numbers here.</td></tr>`;
     return;
   }
   select.hidden = download.hidden = copyBtn.hidden = false;
@@ -418,6 +418,7 @@ function renderRawDataTable(runs) {
       <td>${b.snr_db}</td>
       <td>${b.n_total}</td>
       <td class="${b.preamble_missed ? "fail-cell" : ""}">${b.preamble_missed}</td>
+      <td class="${b.preamble_mislocated ? "fail-cell" : ""}">${b.preamble_mislocated ?? "—"}</td>
       <td class="${b.offset_fail ? "fail-cell" : ""}">${b.offset_fail}</td>
       <td class="${b.demod_fail ? "fail-cell" : ""}">${b.demod_fail}</td>
       <td>${cfoPct === null ? "—" : cfoPct.toFixed(1) + "%"}</td>
@@ -429,7 +430,7 @@ function renderRawDataTable(runs) {
     tbody.appendChild(tr);
   }
   if (sortedBins.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" id="raw-data-empty">No packets landed in any SNR bin yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" id="raw-data-empty">No packets landed in any SNR bin yet.</td></tr>`;
   }
 }
 
@@ -458,7 +459,9 @@ function renderDiagnostics(runs) {
   tbody.innerHTML = "";
   for (const r of runs) {
     const n = r.bins.reduce((a, b) => a + b.n_total, 0);
-    const missed = r.bins.reduce((a, b) => a + b.preamble_missed, 0);
+    // Mislocated counts as a preamble failure here too, so "Reached" really is the
+    // number of packets the offset estimator got a usable starting point for.
+    const missed = r.bins.reduce((a, b) => a + b.preamble_missed + (b.preamble_mislocated ?? 0), 0);
     const offFail = r.bins.reduce((a, b) => a + b.offset_fail, 0);
     const reached = n - missed - offFail;
     const tr = document.createElement("tr");
@@ -476,7 +479,7 @@ function renderWarningBanner(runs) {
   const bad = runs
     .map((r) => {
       const n = r.bins.reduce((a, b) => a + b.n_total, 0);
-      const missed = r.bins.reduce((a, b) => a + b.preamble_missed, 0);
+      const missed = r.bins.reduce((a, b) => a + b.preamble_missed + (b.preamble_mislocated ?? 0), 0);
       return { label: r.label, rate: n ? missed / n : 0 };
     })
     .filter((x) => x.rate > 0.15);
