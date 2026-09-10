@@ -74,19 +74,10 @@ def default_toggles_for(preamble_detection_method: str) -> dict:
     return CALORA_DEFAULT_TOGGLES if preamble_detection_method == "calora" else CONVENTIONAL_DEFAULT_TOGGLES
 
 
-# How far the located payload start may sit from ground truth and still count as located.
-# 1 frame, matching downchirp_search_radius=1 -- the slack the offset estimator genuinely
-# absorbs downstream.
-#
-# Both methods are scored on the SAME quantity (index_payload, in frames) so the two are
-# actually comparable. Scoring CALoRa on its own t_start instead does NOT work: the 8
-# up-chirps are identical, so its ~8-symbol window legitimately locks onto symbols 2-9
-# rather than 1-8, shifting t_start by exactly +33 columns. Measured at 0 dB, a
-# +/-33-column tolerance on t_start therefore reads only 72% -- scoring a correct
-# detection as a failure -- while widening to +/-66 columns puts the -40 dB chance floor
-# at 42%, since a window scattered at random over ~361 columns lands inside a 132-column
-# band that often. index_payload has neither problem: 82-98% at high SNR, 0% at -40 dB.
+# How far the located payload start may sit from ground truth and still count as located
+# for both CALoRa and conventional paths (in frames).
 PREAMBLE_LOCATION_TOL_FRAMES = 1.0
+CALORA_LOCATION_TOL_COLS = 33  # Kept for backward compatibility if imported externally
 
 
 class TooManyRunsError(Exception):
@@ -222,6 +213,7 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
     if server_config["preamble_detection_method"] == "calora":
         model = calora_bridge.load_calora_detector(server_config["calora_checkpoint"])
         is_detected, t_start, t_end, _mean_prob = calora_bridge.detect_preamble_calora_with_model(opts, iq, model)
+
         if not is_detected:
             result["outcome"] = "preamble_missed"
             return result
@@ -243,15 +235,10 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
             downchirp_search_radius=toggles["downchirp_search_radius"],
         )
         if index_payload in (-1, -2) or index_payload is None:
-            result["outcome"] = "offset_fail"
+            # Preamble was signaled by CALoRa, but downchirps/sync could not be found
+            # (common in heavy noise / false alarm). Count as mislocated.
+            result["outcome"] = "preamble_mislocated"
             return result
-        # CALoRa has no "not found" state of its own: best_interval_from_p is an argmax
-        # over sliding windows, so it ALWAYS returns an interval, and the only gate is
-        # mean_prob > CALORA_THRESH -- a pure confidence question with no positional
-        # check. Measured on pure noise the probability floor sits at ~0.62, above the
-        # 0.5 gate, so is_detected stayed ~100% all the way down to -40 dB while the
-        # interval scattered at random. The positional check below is what makes this
-        # metric mean anything on the CALoRa path.
     else:
         index_payload, cfo_est, sto_est, _found = detect_cfo_sto(
             opts, LoRa, iq,
@@ -265,7 +252,9 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
             result["outcome"] = "preamble_missed"
             return result
         if index_payload == -2 or index_payload is None:
-            result["outcome"] = "offset_fail"
+            # -2 means conventional hallucinated a preamble but failed to find downchirps/sync.
+            # Without a location to verify, this is a false positive and must be penalized.
+            result["outcome"] = "preamble_mislocated"
             return result
 
     # Ground-truth payload start, in frames: 2 zonk + 8 up-chirps + 2 sync + 2.25 down,
@@ -274,12 +263,8 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
     gt_payload_frame = (2 + opts.no_of_preamble + len(opts.sync_sym) + 2.25
                         - numb_offset / framePerSymbol)
     if abs(float(index_payload) - gt_payload_frame) > PREAMBLE_LOCATION_TOL_FRAMES:
-        # The detector answered "found it" but pointed somewhere else. Kept separate from
-        # preamble_missed (an honest "no") because only the conventional path can produce
-        # an honest "no" at all -- collapsing the two would hide exactly the difference
-        # between the methods. Terminal: the offset estimator never had a usable starting
-        # point, so its CFO/STO errors here are meaningless and must not pollute those
-        # stats.
+        # Both methods: if the payload start is located > PREAMBLE_LOCATION_TOL_FRAMES
+        # from ground truth, it was a false detection in noise / mislocated.
         result["outcome"] = "preamble_mislocated"
         return result
 

@@ -254,6 +254,18 @@ function statusBadge(status) {
   return `<span class="status-badge ${status}">${status}</span>`;
 }
 
+export function datasetImpairmentInfo(clientConfig) {
+  if (!clientConfig) return "Data: Clean";
+  const cfo = clientConfig.cfo_hz_range || [0, 0];
+  const sto = clientConfig.sto_samp_range || [0, 0];
+  const hasCfo = (cfo[0] !== 0 || cfo[1] !== 0);
+  const hasSto = (sto[0] !== 0 || sto[1] !== 0);
+  if (hasCfo && hasSto) return "Data: Both CFO & STO";
+  if (hasCfo) return "Data: CFO only";
+  if (hasSto) return "Data: STO only";
+  return "Data: Clean";
+}
+
 function configSummary(clientConfig, serverConfig) {
   const method = serverConfig.preamble_detection_method === "calora"
     ? `CALoRa (${(serverConfig.calora_checkpoint || "?").replace(".pth", "")})`
@@ -262,7 +274,8 @@ function configSummary(clientConfig, serverConfig) {
   const t = serverConfig.toggles || {};
   const corr = [t.apply_cfo_correction !== false ? "CFO" : null,
                 t.apply_sto_correction !== false ? "STO" : null].filter(Boolean).join("+") || "no correction";
-  return `${method} + ${demod} · ${corr} · SF${clientConfig.sf} ${clientConfig.bw / 1000}kHz@${clientConfig.fs / 1000}kHz · `
+  const dataTag = datasetImpairmentInfo(clientConfig);
+  return `${method} [${dataTag}] + ${demod} · ${corr} · SF${clientConfig.sf} ${clientConfig.bw / 1000}kHz@${clientConfig.fs / 1000}kHz · `
        + `SNR ${clientConfig.snr_db_range[0]}..${clientConfig.snr_db_range[1]}`;
 }
 
@@ -352,6 +365,17 @@ function currentRunsToShow() {
     const bins = binsCache.get(id) || [];
     const isLive = id === liveRunId;
     let label = meta ? meta.label : id.slice(0, 8);
+    if (meta && meta.client_config) {
+      const dataTag = datasetImpairmentInfo(meta.client_config);
+      if (dataTag && !label.includes("Data:") && !label.includes("CFO & STO")) {
+        const plusIdx = label.indexOf("+");
+        if (plusIdx !== -1) {
+          label = `${label.slice(0, plusIdx).trim()} [${dataTag}] ${label.slice(plusIdx)}`;
+        } else {
+          label = `${label} [${dataTag}]`;
+        }
+      }
+    }
     if (isLive) {
       const total = bins.reduce((a, b) => a + b.n_total, 0);
       label += ` (running)`;

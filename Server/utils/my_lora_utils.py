@@ -1073,6 +1073,7 @@ def spec_to_network_input(x,freq):
         y_abs_max = torch.tensor(
             list(map(lambda x: torch.max(x), y_abs)))
         y_abs_max = to_var(torch.unsqueeze(torch.unsqueeze(y_abs_max, 1), 2))
+        y_abs_max = torch.clamp(y_abs_max, min=1e-8)
         y = torch.div(y, y_abs_max)
     
     if x_image_channel == 2:

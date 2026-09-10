@@ -108,7 +108,20 @@ def make_label(client_config: dict, server_config: dict) -> str:
     fs = client_config.get("fs", 1_000_000)
     snr_lo, snr_hi = client_config.get("snr_db_range", [None, None])
 
-    return (f"{method_label} + {demod_label}, {corr_label}, "
+    cfo_range = client_config.get("cfo_hz_range", [0, 0])
+    sto_range = client_config.get("sto_samp_range", [0, 0])
+    has_cfo = (cfo_range[0] != 0 or cfo_range[1] != 0)
+    has_sto = (sto_range[0] != 0 or sto_range[1] != 0)
+    if has_cfo and has_sto:
+        data_tag = "Data: Both CFO & STO"
+    elif has_cfo:
+        data_tag = "Data: CFO only"
+    elif has_sto:
+        data_tag = "Data: STO only"
+    else:
+        data_tag = "Data: Clean"
+
+    return (f"{method_label} [{data_tag}] + {demod_label}, {corr_label}, "
             f"SF{sf} {bw//1000}kHz@{fs//1000}kHz, SNR {snr_lo}..{snr_hi}")
 
 

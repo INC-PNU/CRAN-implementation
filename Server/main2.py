@@ -267,7 +267,7 @@ def plot_debug_spectrogram(
 # CALoRa preamble detection
 # ─────────────────────────────────────────────────────────────────────────────
 CALORA_THRESH = 0.5            # Probability threshold (mean_prob > thresh)
-LOCATION_TOL_COLS = 37         # Tolerance in spectrogram columns (~1 LoRa symbol)
+LOCATION_TOL_COLS = 33         # Tolerance in spectrogram columns (1 LoRa symbol)
 
 
 def detect_preamble_calora(opts, iq: np.ndarray):

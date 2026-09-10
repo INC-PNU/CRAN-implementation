@@ -103,8 +103,8 @@ opts.gateway_id = 1
 results = run_batch(
     base_opts=opts,
     n_packets=2000,
-    cfo_hz_range=(-4750, 4575), #4575
+    cfo_hz_range=(0, 0), #4575
     sto_samp_range=(0, 0),
-    snr_db_range=(-35, 0),
+    snr_db_range=(-30, -10),
     seed=-12,
 )
