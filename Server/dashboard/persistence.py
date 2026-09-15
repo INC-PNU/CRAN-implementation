@@ -198,7 +198,7 @@ def _bin_percentages(b: dict) -> dict:
     # recorded after this change.
     mislocated = b.get("preamble_mislocated", 0)
     located = b["n_total"] - b["preamble_missed"] - mislocated
-    reached = located - b["offset_fail"]
+    reached = located - b.get("offset_fail", 0)
     return {
         "cfo_success_rate_conditioned_pct": (b["cfo_correct"] / reached * 100) if reached else 0.0,
         "cfo_success_rate_per_packet_pct": (b["cfo_correct"] / b["n_total"] * 100) if b["n_total"] else 0.0,
@@ -222,7 +222,6 @@ def export_per_snr_csv(run_id: str) -> Path:
 
     path = run_dir(run_id) / "per_snr.csv"
     raw_cols = ["snr_db", "n_total", "preamble_missed", "preamble_mislocated",
-                "offset_fail", "demod_fail",
                 "cfo_correct", "sto_correct", "cfo_mae_hz", "sto_mae_samples",
                 "symbol_total", "symbol_correct", "symbol_total_sent"]
     pct_cols = ["preamble_detection_rate_pct", "preamble_answered_yes_pct",

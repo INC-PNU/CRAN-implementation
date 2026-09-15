@@ -87,17 +87,17 @@
                default) so first paint isn't wrong before app.js's applyMethodDefaults()
                runs; that function re-applies the correct set per method afterward. -->
           <label class="checkbox"><input type="checkbox" id="precorrect_cfo_frac"> Precorrect fractional CFO</label>
-          <label class="checkbox"><input type="checkbox" id="use_fractional_sto"> Use fractional STO refinement</label>
           <label class="checkbox"><input type="checkbox" id="verify_network_id" checked> Verify network ID (reject on mismatch)</label>
           <label class="checkbox"><input type="checkbox" id="sync_payload_offset_adjust" checked> Sync-based payload offset adjust</label>
           <label>STO method
             <select id="sto_method">
               <option value="v1">v1 (cross-correlation)</option>
-              <option value="v3">v3 (closed-form)</option>
+              <option value="v3" selected>v3 (closed-form)</option>
             </select>
           </label>
+          <label class="checkbox"><input type="checkbox" id="use_fractional_sto" checked> Refine fractional STO (sub-chip)</label>
           <label>Down-chirp search radius
-            <input type="number" id="downchirp_search_radius" value="1" min="0" max="3">
+            <input type="number" id="downchirp_search_radius" value="2" min="0" max="3">
           </label>
         </details>
       </fieldset>
@@ -123,7 +123,7 @@
       <details id="diagnostics-details">
         <summary>Run diagnostics</summary>
         <table id="diagnostics-table"><thead>
-          <tr><th>Run</th><th>N</th><th>Preamble miss %</th><th>Offset fail %</th><th>Reached</th></tr>
+          <tr><th>Run</th><th>N</th><th>Preamble fail %</th><th>Reached</th></tr>
         </thead><tbody></tbody></table>
       </details>
     </div>
@@ -158,7 +158,6 @@
               <th>SNR</th><th>N</th>
               <th title="Detector answered no: conventional returned -1, or CALoRa's mean_prob fell below 0.5">PreMiss</th>
               <th title="Detector answered yes but estimated preamble start was >33 cols (CALoRa) or payload start was >1 frame (conventional) from ground truth">PreMisloc</th>
-              <th>OffFail</th><th>DemodFail</th>
               <th>CFO ok</th><th>CFO MAE (Hz)</th>
               <th>STO ok</th><th>STO MAE (samp)</th>
               <th>Sym correct/total</th><th>Sym %</th>

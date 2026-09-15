@@ -183,7 +183,7 @@ def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
 def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint_symbol=None,
                    precorrect_cfo_frac=None,use_fractional_sto=None,verify_network_id=None,
                    sync_payload_offset_adjust=None,sto_method=None,
-                   downchirp_search_radius=1):
+                   downchirp_search_radius=1, return_details=False):
     """
     preamble_hint_symbol: optional externally-supplied symbol-frame index (e.g. from a
     neural preamble detector such as CALoRa) marking where the preamble begins. When
@@ -243,13 +243,13 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
     if precorrect_cfo_frac is None:
         precorrect_cfo_frac = has_hint
     if use_fractional_sto is None:
-        use_fractional_sto = has_hint
+        use_fractional_sto = True
     if verify_network_id is None:
         verify_network_id = not has_hint
     if sync_payload_offset_adjust is None:
         sync_payload_offset_adjust = not has_hint
     if sto_method is None:
-        sto_method = "v3" if has_hint else "v1"
+        sto_method = "v3"
 
     THRESHOLD_FOR_PREAMBLE_DETECTION = 0.625
     factor = 1.4
@@ -320,9 +320,9 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
             
             if (preamble_found == False):  
                 # print("PREM NOT FOUND")
-                return -1,None,None,preamble_found
+                return (-1,None,None,preamble_found,None) if return_details else (-1,None,None,preamble_found)
             elif (preamble_found == True):
-                return -2,None,None,preamble_found
+                return (-2,None,None,preamble_found,None) if return_details else (-2,None,None,preamble_found)
         ### DECHIRPED WITH UP CHIRP    
         preamble_symbol,_ = estimate_symbol(opts,LoRa,frameBuffer)
       
@@ -372,7 +372,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         i = i + 1
     
     if (global_index_that_start_a_down_chirp is None or global_index_that_start_a_down_chirp < 10):
-        return -2,None,None,preamble_found
+        return (-2,None,None,preamble_found,None) if return_details else (-2,None,None,preamble_found)
     global_index_that_start_a_payload = global_index_that_start_a_down_chirp + 1.25
     
     fup_chosen = global_index_that_start_a_down_chirp - 5 # -5 is fix and safe
@@ -399,12 +399,11 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
     dechirped_down = down_frame * up_chirp_signal    #VERSI 1.2
 
     #########################################################
-    psd_up = np.abs(np.fft.fftshift(np.fft.fft(dechirped_up)))  
     if (opts.bw == opts.fs):
-        combine = psd_up
-        choose_index = np.argmax(psd_up)
+        combine = np.abs(np.fft.fft(dechirped_up))
+        choose_index = np.argmax(combine)
     else:
-
+        psd_up = np.abs(np.fft.fftshift(np.fft.fft(dechirped_up)))
         fft_len = len(psd_up)
         center = fft_len // 2
         bins = opts.n_classes
@@ -414,48 +413,36 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
 
         #I WANT TO TRY FIND STO FRACTIONAL #
         choose_index = np.argmax(combine)
-    next_index = (choose_index + 1) % opts.n_classes
-    prev_index = (choose_index - 1 + opts.n_classes) % opts.n_classes
-    prev_value = combine[prev_index]
-    next_value = combine[next_index]
-    def timing_error_nonlinear(TE_raw, A=4.0, B=2.5):
-        return A * np.tanh(B * TE_raw)
-    
-    
-    if (next_value > prev_value): 
-        diff = next_value - prev_value
-        TE_raw = diff/combine[choose_index]
-        # print("--")
-        # print("TE RAW : ",TE_raw)
-        sto_offset = timing_error_nonlinear(TE_raw)
-        # print(sto_offset)
-        shift_sto_index = predict_te(sto_offset * -1)
-        # print(shift_sto_index)
-        over_sample = int(opts.fs / opts.bw) # should be 8
-        shift_sto_index = np.round(shift_sto_index * over_sample) * -1
-        
-        # print(shift_sto_index)
-    else:
-        diff = prev_value - next_value
-        TE_raw = diff/combine[choose_index]
-        # print("++")
-        # print("TE RAW : ",TE_raw)
-        sto_offset = timing_error_nonlinear(TE_raw)
-        # print(sto_offset)
-        over_sample = int(opts.fs / opts.bw) # should be 8
-        shift_sto_index = predict_te(sto_offset * -1)
-        shift_sto_index = np.round(shift_sto_index * over_sample) 
-        # print(shift_sto_index)
-      
-    # symbol_up = np.argmax(combine)
     symbol_up = choose_index
+    shift_sto_index = 0
+    if use_fractional_sto:
+        next_index = (choose_index + 1) % opts.n_classes
+        prev_index = (choose_index - 1 + opts.n_classes) % opts.n_classes
+        prev_value = combine[prev_index]
+        next_value = combine[next_index]
+        def timing_error_nonlinear(TE_raw, A=4.0, B=2.5):
+            return A * np.tanh(B * TE_raw)
+        
+        if (next_value > prev_value): 
+            diff = next_value - prev_value
+            TE_raw = diff/combine[choose_index]
+            sto_offset = timing_error_nonlinear(TE_raw)
+            over_sample = int(opts.fs / opts.bw)
+            shift_sto_index = predict_te(sto_offset * -1)
+            shift_sto_index = np.round(shift_sto_index * over_sample) * -1
+        else:
+            diff = prev_value - next_value
+            TE_raw = diff/combine[choose_index]
+            sto_offset = timing_error_nonlinear(TE_raw)
+            over_sample = int(opts.fs / opts.bw)
+            shift_sto_index = predict_te(sto_offset * -1)
+            shift_sto_index = np.round(shift_sto_index * over_sample)
    
-    psd_down = np.abs(np.fft.fftshift(np.fft.fft(dechirped_down)))
     if (opts.bw == opts.fs):
-        combine = psd_down
-        choose_index = np.argmax(psd_down)
+        combine = np.abs(np.fft.fft(dechirped_down))
+        choose_index = np.argmax(combine)
     else:
-
+        psd_down = np.abs(np.fft.fftshift(np.fft.fft(dechirped_down)))
         fft_len = len(psd_down)
         center = fft_len // 2
         bins = opts.n_classes
@@ -582,11 +569,11 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         start_1 = i_down * framePerSymbol + sto
         start_2 = i_down_2 * framePerSymbol + sto
         if start_2 < 0:
-            return -2, None, None, preamble_found
+            return (-2, None, None, preamble_found, None) if return_details else (-2, None, None, preamble_found)
         sync_frame_1 = rx_samples[start_1:start_1 + framePerSymbol] * correction_factor_by_cfo_total
         sync_frame_2 = rx_samples[start_2:start_2 + framePerSymbol] * correction_factor_by_cfo_total
         if len(sync_frame_1) != framePerSymbol or len(sync_frame_2) != framePerSymbol:
-            return -2, None, None, preamble_found
+            return (-2, None, None, preamble_found, None) if return_details else (-2, None, None, preamble_found)
         symbol_sync_1, _ = estimate_symbol(opts, LoRa, sync_frame_1)
         symbol_sync_2, _ = estimate_symbol(opts, LoRa, sync_frame_2)
 
@@ -594,7 +581,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         # Reject-only: matches the no-hint path's original unconditional "neither sync
         # symbol matched" rejection, now also available (opt-in) on the hint path.
         if (symbol_sync_1 not in opts.sync_sym) and (symbol_sync_2 not in opts.sync_sym):
-            return -2, None, None, preamble_found
+            return (-2, None, None, preamble_found, None) if return_details else (-2, None, None, preamble_found)
 
     if sync_payload_offset_adjust:
         if (symbol_sync_1 == opts.sync_sym[1]):
@@ -617,4 +604,17 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         global_index_that_start_a_payload += 1
     ################## SYNC detection #############################
 
-    return global_index_that_start_a_payload,CFO_FINAL,lag_samples,preamble_found
+    if return_details:
+        details = {
+            "cfo_int_hz": float(CFO_INT_HZ),
+            "cfo_frac_hz": float(CFO_FRAC_estimation),
+            "cfo_total_hz": float(CFO_FINAL),
+            "sto_int_samp": float(STO_INT_CHIPS * over_sample if sto_method == "v3" else lag_samples),
+            "sto_frac_samp": float(shift_sto_index if (sto_method == "v3" and use_fractional_sto) else 0.0),
+            "sto_total_samp": float(lag_samples),
+            "downchirp_index": float(global_index_that_start_a_down_chirp),
+            "index_payload": float(global_index_that_start_a_payload),
+        }
+        return global_index_that_start_a_payload, CFO_FINAL, lag_samples, preamble_found, details
+
+    return global_index_that_start_a_payload, CFO_FINAL, lag_samples, preamble_found

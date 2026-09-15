@@ -57,7 +57,7 @@ export function computeSeries(bins, scope) {
     // windows + a confidence gate its probability floor never trips), so without this
     // term its rate read ~100% down to -40 dB.
     const located = b.n_total - b.preamble_missed - mislocated;
-    const reached = located - b.offset_fail;
+    const reached = located - (b.offset_fail || 0);
     out.preamble[b.snr_db] = pct(located, b.n_total);
     out.n[b.snr_db] = b.n_total;
     if (scope === "conditioned") {

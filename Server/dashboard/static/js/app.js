@@ -28,11 +28,13 @@ const $ = (id) => document.getElementById(id);
 // showing up in the CFO/STO charts, since those estimates stay correct either way.
 const METHOD_DEFAULTS = {
   conventional: {
-    precorrect_cfo_frac: false, use_fractional_sto: false,
-    verify_network_id: true, sync_payload_offset_adjust: true, sto_method: "v1",
+    precorrect_cfo_frac: false,
+    use_fractional_sto: true,
+    verify_network_id: true, sync_payload_offset_adjust: true, sto_method: "v3",
   },
   calora: {
-    precorrect_cfo_frac: true, use_fractional_sto: true,
+    precorrect_cfo_frac: true,
+    use_fractional_sto: true,
     verify_network_id: false, sync_payload_offset_adjust: false, sto_method: "v3",
   },
 };
@@ -443,8 +445,6 @@ function renderRawDataTable(runs) {
       <td>${b.n_total}</td>
       <td class="${b.preamble_missed ? "fail-cell" : ""}">${b.preamble_missed}</td>
       <td class="${b.preamble_mislocated ? "fail-cell" : ""}">${b.preamble_mislocated ?? "—"}</td>
-      <td class="${b.offset_fail ? "fail-cell" : ""}">${b.offset_fail}</td>
-      <td class="${b.demod_fail ? "fail-cell" : ""}">${b.demod_fail}</td>
       <td>${cfoPct === null ? "—" : cfoPct.toFixed(1) + "%"}</td>
       <td>${b.cfo_mae_hz === null ? "—" : b.cfo_mae_hz.toFixed(2)}</td>
       <td>${stoPct === null ? "—" : stoPct.toFixed(1) + "%"}</td>
@@ -454,7 +454,7 @@ function renderRawDataTable(runs) {
     tbody.appendChild(tr);
   }
   if (sortedBins.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="12" id="raw-data-empty">No packets landed in any SNR bin yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" id="raw-data-empty">No packets landed in any SNR bin yet.</td></tr>`;
   }
 }
 
@@ -486,12 +486,10 @@ function renderDiagnostics(runs) {
     // Mislocated counts as a preamble failure here too, so "Reached" really is the
     // number of packets the offset estimator got a usable starting point for.
     const missed = r.bins.reduce((a, b) => a + b.preamble_missed + (b.preamble_mislocated ?? 0), 0);
-    const offFail = r.bins.reduce((a, b) => a + b.offset_fail, 0);
-    const reached = n - missed - offFail;
+    const reached = n - missed;
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${r.label}</td><td>${n}</td>`
       + `<td>${n ? (missed / n * 100).toFixed(1) : 0}%</td>`
-      + `<td>${n ? (offFail / n * 100).toFixed(1) : 0}%</td>`
       + `<td>${reached}</td>`;
     tbody.appendChild(tr);
   }

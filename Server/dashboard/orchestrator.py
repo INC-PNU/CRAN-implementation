@@ -52,10 +52,10 @@ CONVENTIONAL_DEFAULT_TOGGLES = {
     "apply_cfo_correction": True,
     "apply_sto_correction": True,
     "precorrect_cfo_frac": False,
-    "use_fractional_sto": False,
+    "use_fractional_sto": True,
     "verify_network_id": True,
     "sync_payload_offset_adjust": True,
-    "sto_method": "v1",
+    "sto_method": "v3",
     "downchirp_search_radius": 1,
 }
 CALORA_DEFAULT_TOGGLES = {
@@ -143,7 +143,6 @@ def _score_payload_symbols(demodulated, ground_truth):
 def _new_bin():
     return {
         "n_total": 0, "preamble_missed": 0, "preamble_mislocated": 0,
-        "offset_fail": 0, "demod_fail": 0,
         "cfo_correct": 0, "sto_correct": 0,
         "cfo_abs_err_sum": 0.0, "cfo_abs_err_count": 0,
         "sto_abs_err_sum": 0.0, "sto_abs_err_count": 0,
@@ -162,8 +161,6 @@ def _publish_bins(acc: dict) -> list:
             "n_total": b["n_total"],
             "preamble_missed": b["preamble_missed"],
             "preamble_mislocated": b["preamble_mislocated"],
-            "offset_fail": b["offset_fail"],
-            "demod_fail": b["demod_fail"],
             "cfo_correct": b["cfo_correct"],
             "sto_correct": b["sto_correct"],
             "cfo_mae_hz": (b["cfo_abs_err_sum"] / b["cfo_abs_err_count"]) if b["cfo_abs_err_count"] else None,
@@ -208,8 +205,33 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
     lora_init = LoRa(opts.sf, opts.bw)
     iq = lora_init.awgn_iq_with_seed(sig, snr, seed=noise_seed)
 
-    result = {"snr": snr, "payload_symbols_gt": payload_symbols_gt}
+    # Ground-truth payload start, in frames: 2 zonk + 8 up-chirps + 2 sync + 2.25 down,
+    # shifted left by the STO crop. Derived from opts rather than hardcoded to 14.25 so
+    # it stays correct if no_of_preamble/sync_sym change.
+    gt_payload_frame = (2 + opts.no_of_preamble + len(opts.sync_sym) + 2.25
+                        - numb_offset / framePerSymbol)
+    sto_true = wrap_symmetric(-numb_offset, framePerSymbol)
 
+    result = {
+        "snr": snr,
+        "payload_symbols_gt": payload_symbols_gt,
+        "gt_payload_frame": float(gt_payload_frame),
+        "gt_payload_sample": int(gt_payload_frame * framePerSymbol),
+        "cfo_true": float(cfo_true),
+        "sto_true": int(sto_true),
+        "numb_offset": int(numb_offset),
+        "cfo_int_hz": None,
+        "cfo_frac_hz": None,
+        "sto_int_samp": None,
+        "sto_frac_samp": None,
+        "cfo_est": None,
+        "sto_est": None,
+        "index_payload": None,
+        "payload_start": None,
+        "payload_start_frame": None,
+    }
+
+    details = None
     if server_config["preamble_detection_method"] == "calora":
         model = calora_bridge.load_calora_detector(server_config["calora_checkpoint"])
         is_detected, t_start, t_end, _mean_prob = calora_bridge.detect_preamble_calora_with_model(opts, iq, model)
@@ -224,57 +246,62 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
         sync_symbol_index = int(round((t_end + 1) / cols_per_symbol))
         downchirp_hint_index = max(0, sync_symbol_index + 2)
 
-        index_payload, cfo_est, sto_est, _found = detect_cfo_sto(
+        index_payload, cfo_est, sto_est, _found, details = detect_cfo_sto(
             opts, LoRa, iq,
             downchirp_hint_symbol=downchirp_hint_index,
             precorrect_cfo_frac=toggles["precorrect_cfo_frac"],
-            use_fractional_sto=toggles["use_fractional_sto"],
+            use_fractional_sto=toggles.get("use_fractional_sto", True),
             verify_network_id=toggles["verify_network_id"],
             sync_payload_offset_adjust=toggles["sync_payload_offset_adjust"],
             sto_method=toggles["sto_method"],
             downchirp_search_radius=toggles["downchirp_search_radius"],
+            return_details=True,
         )
         if index_payload in (-1, -2) or index_payload is None:
-            # Preamble was signaled by CALoRa, but downchirps/sync could not be found
-            # (common in heavy noise / false alarm). Count as mislocated.
             result["outcome"] = "preamble_mislocated"
+            result["index_payload"] = float(index_payload) if index_payload is not None else None
             return result
     else:
-        index_payload, cfo_est, sto_est, _found = detect_cfo_sto(
+        index_payload, cfo_est, sto_est, _found, details = detect_cfo_sto(
             opts, LoRa, iq,
             precorrect_cfo_frac=toggles["precorrect_cfo_frac"],
-            use_fractional_sto=toggles["use_fractional_sto"],
+            use_fractional_sto=toggles.get("use_fractional_sto", True),
             verify_network_id=toggles["verify_network_id"],
             sync_payload_offset_adjust=toggles["sync_payload_offset_adjust"],
             sto_method=toggles["sto_method"],
+            return_details=True,
         )
         if index_payload == -1:
             result["outcome"] = "preamble_missed"
+            result["index_payload"] = float(index_payload) if index_payload is not None else None
             return result
         if index_payload == -2 or index_payload is None:
-            # -2 means conventional hallucinated a preamble but failed to find downchirps/sync.
-            # Without a location to verify, this is a false positive and must be penalized.
             result["outcome"] = "preamble_mislocated"
+            result["index_payload"] = float(index_payload) if index_payload is not None else None
             return result
 
-    # Ground-truth payload start, in frames: 2 zonk + 8 up-chirps + 2 sync + 2.25 down,
-    # shifted left by the STO crop. Derived from opts rather than hardcoded to 14.25 so
-    # it stays correct if no_of_preamble/sync_sym change.
-    gt_payload_frame = (2 + opts.no_of_preamble + len(opts.sync_sym) + 2.25
-                        - numb_offset / framePerSymbol)
+    result["index_payload"] = float(index_payload)
+    result["cfo_est"] = float(cfo_est)
+    result["sto_est"] = float(sto_est)
+    if details:
+        result["cfo_int_hz"] = details.get("cfo_int_hz")
+        result["cfo_frac_hz"] = details.get("cfo_frac_hz")
+        result["sto_int_samp"] = details.get("sto_int_samp")
+        result["sto_frac_samp"] = details.get("sto_frac_samp")
+
     if abs(float(index_payload) - gt_payload_frame) > PREAMBLE_LOCATION_TOL_FRAMES:
-        # Both methods: if the payload start is located > PREAMBLE_LOCATION_TOL_FRAMES
-        # from ground truth, it was a false detection in noise / mislocated.
         result["outcome"] = "preamble_mislocated"
         return result
 
-    sto_true = wrap_symmetric(-numb_offset, framePerSymbol)
     result["cfo_err"] = float(cfo_est - cfo_true)
     result["sto_err"] = float(sto_est - sto_true)
 
     payload_start = int(index_payload * framePerSymbol)
     if toggles["apply_sto_correction"]:
         payload_start += int(sto_est)
+    result["payload_start"] = int(payload_start)
+    result["payload_start_frame"] = float(payload_start / framePerSymbol)
+
     payload_signal = iq[payload_start:]
 
     if toggles["apply_cfo_correction"]:
@@ -323,6 +350,39 @@ def run_experiment(run_id: str, client_config: dict, server_config: dict,
                 return
 
             r = _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePerSymbol)
+
+            if (i + 1) % 50 == 0 or i == 0:
+                print("=" * 75)
+                print(f"[Packet {i+1}/{n_packets}] (Run: {run_id[:8]})")
+                print(f"  * SNR                       : {r.get('snr')} dB")
+                print(f"  * GT Payload Location       : frame {r.get('gt_payload_frame'):.3f} (sample {r.get('gt_payload_sample')})")
+                print(f"  * GT CFO                    : {r.get('cfo_true'):.2f} Hz")
+                print(f"  * GT STO                    : {r.get('sto_true')} samples (numb_offset: {r.get('numb_offset')})")
+                if r.get("outcome") in ("preamble_missed", "preamble_mislocated"):
+                    print(f"  * Detection Outcome         : {r.get('outcome')} (detected frame: {r.get('index_payload')})")
+                else:
+                    cfo_i = r.get('cfo_int_hz')
+                    cfo_f = r.get('cfo_frac_hz')
+                    cfo_tot = r.get('cfo_est')
+                    sto_i = r.get('sto_int_samp')
+                    sto_f = r.get('sto_frac_samp')
+                    sto_tot = r.get('sto_est')
+                    p_start = r.get('payload_start')
+                    p_frame = r.get('payload_start_frame')
+                    p_det = r.get('index_payload')
+
+                    cfo_i_str = f"{cfo_i:.2f} Hz" if cfo_i is not None else "N/A"
+                    cfo_f_str = f"{cfo_f:.2f} Hz" if cfo_f is not None else "N/A"
+                    cfo_tot_str = f"{cfo_tot:.2f} Hz" if cfo_tot is not None else "N/A"
+                    sto_i_str = f"{sto_i:.2f} samp" if sto_i is not None else "N/A"
+                    sto_f_str = f"{sto_f:.2f} samp" if sto_f is not None else "N/A"
+                    sto_tot_str = f"{sto_tot:.2f} samp" if sto_tot is not None else "N/A"
+
+                    print(f"  * CFO Estimation            : Total {cfo_tot_str} (Int: {cfo_i_str}, Frac: {cfo_f_str})")
+                    print(f"  * STO Estimation            : Total {sto_tot_str} (Int: {sto_i_str}, Frac: {sto_f_str})")
+                    print(f"  * Payload Start (corrected) : sample {p_start} (frame {p_frame:.3f}, detected frame: {p_det:.3f})")
+                print("=" * 75, flush=True)
+
             snr = r["snr"]
             b = acc.setdefault(snr, _new_bin())
             b["n_total"] += 1
@@ -332,8 +392,6 @@ def run_experiment(run_id: str, client_config: dict, server_config: dict,
                 b["preamble_missed"] += 1
             elif r["outcome"] == "preamble_mislocated":
                 b["preamble_mislocated"] += 1
-            elif r["outcome"] == "offset_fail":
-                b["offset_fail"] += 1
             else:
                 cfo_tol = opts.bw / (2 * opts.n_classes)
                 sto_tol = opts.fs / opts.bw
@@ -347,9 +405,7 @@ def run_experiment(run_id: str, client_config: dict, server_config: dict,
                     b["sto_correct"] += 1
 
                 demod_result = r["demod_result"]
-                if demod_result is None:
-                    b["demod_fail"] += 1
-                else:
+                if demod_result is not None:
                     n_compare, matches = demod_result
                     b["symbol_total"] += n_compare
                     b["symbol_correct"] += matches

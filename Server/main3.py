@@ -80,7 +80,7 @@ PRECORRECT_CFO_FRAC = True
 
 # Add shift_sto_index, the sub-chip STO refinement.
 # OFF -> STO is quantised to whole chips (fs/bw = 8 samples at SF7/1 MHz).
-USE_FRACTIONAL_STO = True
+USE_FRACTIONAL_STO = False
 
 # Decode the 2 network-id/sync symbols and reject the packet if neither matches.
 # ON -> reproduces the conventional guard. It only rejects; it cannot improve an
