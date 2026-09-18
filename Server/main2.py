@@ -44,7 +44,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _CHECKPOINT_MAP = {
     7: Path(__file__).resolve().parent
         / "models" / "calora" / "checkpoints" / "sf7" / "ori_checkpoints"
-        / "premamble_best_finetuned_cfo_mix.pth",
+        / "preamble_best_finetuned_cfo_mix.pth",
 }
 
 _MODEL_CACHE: dict = {}
@@ -79,13 +79,13 @@ def _load_model(sf: int):
             state = state["state_dict"]
   
     load_res = model.load_state_dict(state, strict=False)
-    print(f"[PreambleDetector] Load Result: {load_res}")
+    print(f"[Preamble Detector] Load Result: {load_res}")
     
     model.to(DEVICE)
     model.eval()
 
     _MODEL_CACHE[sf] = model
-    print(f"[CALoRa] PreambleDetector loaded for SF{sf} from {ckpt_path.name}")
+    print(f"[CALoRa] Preamble Detector loaded for SF{sf} from {ckpt_path.name}")
     return model
 
 _load_model(7)
