@@ -37,7 +37,7 @@ from utils.LoRa import LoRa
 from utils.helper_function import detect_cfo_sto, wrap_symmetric
 from utils.my_lora_utils import (create_lora_preamble, create_lora_payload, add_cfo,
                                  calculate_symbol_alliqfile_with_down_sampling)
-from utils import nelora_inference
+from utils import nelora_inference, loraseek_inference, gloriphy_inference
 from dashboard import calora_bridge, persistence
 
 MAX_CONCURRENT_RUNS = 3
@@ -92,9 +92,10 @@ def validate_config(client_config: dict, server_config: dict) -> None:
     """Raises ConfigError with a human-readable message on anything invalid. Called by
     dashboard/routes.py before starting a run, so a bad config becomes an HTTP 400
     instead of a mid-sweep crash."""
-    if client_config.get("sf", 7) != 7:
-        raise ConfigError("SF8+ is not supported yet — CALoRa and NeLoRa checkpoints "
-                          "in this version are SF7-only.")
+    sf = client_config.get("sf", 7)
+    if sf != 7:
+        raise ConfigError(f"SF{sf} is not enabled yet — keeping the benchmark strictly at SF7 "
+                          "so CALoRa preamble detection and symbol decoders compare on the exact same dataset.")
     for key in ("cfo_hz_range", "sto_samp_range", "snr_db_range"):
         lo, hi = client_config.get(key, [0, 0])
         if lo > hi:
@@ -115,11 +116,29 @@ def validate_config(client_config: dict, server_config: dict) -> None:
                               f"{checkpoints[ckpt]['load_warnings']}")
 
     demod = server_config.get("symbol_decoding_method", "conventional")
-    if demod not in ("conventional", "nelora"):
+    if demod not in ("conventional", "nelora", "loraseek", "gloriphy"):
         raise ConfigError(f"unknown symbol_decoding_method: {demod!r}")
-    if demod == "nelora" and not nelora_inference.NELORA_VALIDATED:
-        raise ConfigError("symbol_decoding_method='nelora' is not available: "
-                          "NeLoRa has not passed dashboard/validate_nelora.py yet.")
+    if demod == "nelora":
+        if not nelora_inference.NELORA_VALIDATED:
+            raise ConfigError("symbol_decoding_method='nelora' is not available: "
+                              "NeLoRa has not passed dashboard/validate_nelora.py yet.")
+    if demod == "loraseek":
+        if not loraseek_inference.LORASEEK_AVAILABLE:
+            raise ConfigError("symbol_decoding_method='loraseek' is not available: "
+                              "LoRaSeek checkpoints not found on disk.")
+        ckpt = server_config.get("loraseek_checkpoint")
+        if ckpt and ckpt not in loraseek_inference.AVAILABLE_CHECKPOINTS:
+            raise ConfigError(f"unknown loraseek_checkpoint: {ckpt!r}")
+    if demod == "gloriphy":
+        if not gloriphy_inference.GLORIPHY_AVAILABLE:
+            raise ConfigError("symbol_decoding_method='gloriphy' is not available: "
+                              "GLoRiPHY checkpoints not found on disk.")
+        if sf not in gloriphy_inference.SUPPORTED_SFS:
+            raise ConfigError(f"symbol_decoding_method='gloriphy' does not have a checkpoint for SF{sf}. "
+                              f"Available SFs on disk: {gloriphy_inference.SUPPORTED_SFS}.")
+        ckpt = server_config.get("gloriphy_checkpoint")
+        if ckpt and ckpt not in gloriphy_inference.AVAILABLE_CHECKPOINTS:
+            raise ConfigError(f"unknown gloriphy_checkpoint: {ckpt!r}")
 
 
 def _score_payload_symbols(demodulated, ground_truth):
@@ -310,10 +329,30 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
     else:
         payload_corrected = payload_signal
 
-    if server_config["symbol_decoding_method"] == "nelora":
+    if server_config["symbol_decoding_method"] == "loraseek":
+        ckpt = server_config.get("loraseek_checkpoint", loraseek_inference.DEFAULT_CHECKPOINT)
+        demod_symbols = loraseek_inference.demodulate_payload_loraseek(
+            payload_corrected, opts.sf, opts.bw, opts.fs, checkpoint_name=ckpt)
+    elif server_config["symbol_decoding_method"] == "nelora":
         demod_symbols = nelora_inference.demodulate_payload_nelora(
             payload_corrected, opts.sf, opts.bw, opts.fs,
             checkpoint_id=server_config.get("nelora_checkpoint", "100000"))
+    elif server_config["symbol_decoding_method"] == "gloriphy":
+        ckpt = server_config.get("gloriphy_checkpoint")
+        pre_start = max(0, payload_start - int(12.25 * framePerSymbol))
+        pre_end = pre_start + int(8 * framePerSymbol)
+        sfd_start = max(0, payload_start - int(2.25 * framePerSymbol))
+        if toggles["apply_cfo_correction"]:
+            t_all = np.arange(len(iq)) / opts.fs
+            iq_cfo = iq * np.exp(-1j * 2 * np.pi * cfo_est * t_all)
+            preamble_corr = iq_cfo[pre_start:pre_end]
+            sfd_corr = iq_cfo[sfd_start:payload_start]
+        else:
+            preamble_corr = iq[pre_start:pre_end]
+            sfd_corr = iq[sfd_start:payload_start]
+        demod_symbols = gloriphy_inference.demodulate_payload_gloriphy(
+            payload_corrected, opts.sf, opts.bw, opts.fs, checkpoint_id=ckpt,
+            preamble_iq=preamble_corr, sfd_iq=sfd_corr)
     else:
         demod_symbols = calculate_symbol_alliqfile_with_down_sampling(
             payload_corrected, opts.sf, opts.bw, opts.fs, show=False)

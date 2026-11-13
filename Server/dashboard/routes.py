@@ -5,7 +5,8 @@ from flask import Blueprint, request, jsonify, render_template, send_file
 
 from dashboard import calora_bridge, persistence
 from dashboard.orchestrator import MANAGER, ConfigError, TooManyRunsError
-from utils import nelora_inference
+from dashboard.symbol_benchmark import evaluate_single_frame
+from utils import nelora_inference, loraseek_inference, gloriphy_inference
 
 bp = Blueprint("dashboard", __name__)
 
@@ -19,8 +20,46 @@ def index():
 def capabilities():
     return jsonify({
         "nelora_available": nelora_inference.NELORA_VALIDATED,
+        "loraseek_available": loraseek_inference.LORASEEK_AVAILABLE,
+        "loraseek_checkpoints": loraseek_inference.list_loraseek_checkpoints(),
+        "gloriphy_available": gloriphy_inference.GLORIPHY_AVAILABLE,
+        "gloriphy_supported_sfs": gloriphy_inference.SUPPORTED_SFS,
+        "gloriphy_checkpoints": gloriphy_inference.list_gloriphy_checkpoints(),
         "checkpoints": calora_bridge.list_calora_checkpoints(),
     })
+
+
+@bp.route("/api/benchmark/single-frame", methods=["POST"])
+def benchmark_single_frame():
+    data = request.get_json(force=True) or {}
+    try:
+        sf = int(data.get("sf", 7))
+        bw = int(data.get("bw", 125_000))
+        fs = int(data.get("fs", 1_000_000))
+        n_symbols = int(data.get("n_symbols", 10))
+        if not (1 <= n_symbols <= 1000):
+            return jsonify({
+                "error": "invalid_parameters",
+                "detail": f"Payload length (n_symbols) must be between 1 and 1000 (got {n_symbols})"
+            }), 400
+        snr_db = float(data.get("snr_db", 10.0))
+        apply_cfo = bool(data.get("apply_cfo", False))
+        cfo_hz = float(data.get("cfo_hz", 500.0))
+        apply_sto = bool(data.get("apply_sto", False))
+        sto_samples = int(data.get("sto_samples", 20))
+        apply_compensation = bool(data.get("apply_compensation", True))
+        seed = int(data.get("seed", -1))
+
+        result = evaluate_single_frame(
+            sf=sf, bw=bw, fs=fs, n_symbols=n_symbols, snr_db=snr_db,
+            apply_cfo=apply_cfo, cfo_hz=cfo_hz,
+            apply_sto=apply_sto, sto_samples=sto_samples,
+            apply_compensation=apply_compensation,
+            seed=seed
+        )
+        return jsonify(result), 200
+    except Exception as exc:
+        return jsonify({"error": "benchmark_failed", "detail": str(exc)}), 500
 
 
 @bp.route("/api/runs", methods=["POST"])

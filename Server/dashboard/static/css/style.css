@@ -217,3 +217,278 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .row-actions .duplicate-btn { background: var(--text-dim); }
 
 [hidden] { display: none !important; }
+
+/* ── Navigation Tabs ──────────────────────────────────────────────────────── */
+.app-nav {
+  display: flex;
+  gap: 8px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 20px;
+}
+.nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+.nav-tab:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+.nav-tab.active {
+  background: var(--bg);
+  color: var(--accent);
+  border-color: var(--border);
+}
+.nav-icon { font-size: 14px; }
+
+/* ── Second Page (Single-Frame Benchmark) ─────────────────────────────────── */
+.param-badge-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.param-badge-row .badge {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.sub-param-row {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px 8px;
+  margin-top: 6px;
+}
+.sub-param-row label {
+  margin-top: 0;
+  font-size: 12px;
+}
+.placeholder-card {
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+.result-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.summary-chip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.summary-chip.accent {
+  background: #e6f0fb;
+  border-color: #bcd9f7;
+  color: var(--accent);
+}
+
+.benchmark-models-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.benchmark-models-table th, .benchmark-models-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.benchmark-models-table th {
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 11px;
+}
+.benchmark-models-table tr:hover { background: var(--bg); }
+
+.model-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 11px;
+  color: #fff;
+}
+.model-pill.basic_single_band   { background: #94a3b8; }
+.model-pill.dechirp_downsampled { background: #64748b; }
+.model-pill.basic_dechirp       { background: #64748b; }
+.model-pill.conventional        { background: #10b981; }
+.model-pill.nelora              { background: #f59e0b; }
+.model-pill.calora              { background: #3b82f6; }
+.model-pill.loraseek            { background: #8b5cf6; }
+.model-pill.gloriphy            { background: #ec4899; }
+
+.acc-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.acc-badge.perfect { background: #e4f7e4; color: var(--good); }
+.acc-badge.good    { background: #effbf0; color: #166534; }
+.acc-badge.poor    { background: #fbe6e6; color: var(--critical); }
+.acc-badge.na      { background: #eee; color: var(--text-dim); }
+
+.symbol-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: center;
+}
+.symbol-breakdown-table th, .symbol-breakdown-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.symbol-breakdown-table th:last-child, .symbol-breakdown-table td:last-child {
+  border-right: none;
+}
+.table-scroll-bounded {
+  max-height: 480px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.symbol-breakdown-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  z-index: 2;
+  box-shadow: 0 1px 0 var(--border);
+}
+.symbol-gt-cell {
+  font-weight: 700;
+  background: #f1f5f9;
+}
+.symbol-match-ok {
+  background: #ecfdf5;
+  color: #065f46;
+  font-weight: 700;
+}
+.symbol-match-err {
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 700;
+}
+.symbol-match-na {
+  background: #f8fafc;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* Reference Marks and Citations */
+.ref-cite-mark {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: super;
+  color: var(--accent);
+  margin-left: 3px;
+  text-decoration: none;
+  padding: 0 2px;
+  border-radius: 3px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ref-cite-mark:hover {
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+}
+
+.reference-card {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 20px;
+  margin-top: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.reference-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+.reference-card-header h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.reference-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.reference-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+}
+.reference-badge {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent);
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+.reference-content {
+  flex: 1;
+}
+.reference-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.4;
+}
+.reference-authors {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.reference-details {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.ref-venue {
+  font-weight: 600;
+  color: var(--text);
+}
+.ref-desc {
+  margin: 4px 0 0 0;
+}

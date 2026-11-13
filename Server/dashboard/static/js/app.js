@@ -1,5 +1,13 @@
 import * as api from "./api.js";
-import { createCharts, updateCharts, assignColor, computeSeries, MAX_OVERLAY_RUNS } from "./charts.js";
+import {
+  createCharts,
+  updateCharts,
+  assignColor,
+  computeSeries,
+  MAX_OVERLAY_RUNS,
+  createSingleFrameCharts,
+  updateSingleFrameCharts,
+} from "./charts.js";
 
 const charts = createCharts();
 
@@ -84,11 +92,107 @@ async function loadCapabilities() {
   neloraOpt.textContent = capabilities.nelora_available
     ? "NeLoRa (neural)"
     : "NeLoRa (neural) — not yet validated";
+
+  const loraseekOpt = $("loraseek-option");
+  if (loraseekOpt) {
+    loraseekOpt.disabled = !capabilities.loraseek_available;
+    loraseekOpt.textContent = capabilities.loraseek_available
+      ? "LoRaSeek (neural)"
+      : "LoRaSeek (neural) — checkpoint unavailable";
+  }
+
+  if (capabilities.loraseek_checkpoints && capabilities.loraseek_checkpoints.length) {
+    const lsel = $("loraseek_checkpoint");
+    lsel.innerHTML = "";
+    for (const ck of capabilities.loraseek_checkpoints) {
+      const opt = document.createElement("option");
+      opt.value = ck.filename;
+      opt.textContent = ck.label;
+      if (ck.is_default) opt.selected = true;
+      lsel.appendChild(opt);
+    }
+  }
+
+  const initialSf = Number($("sf").value) || 7;
+  updateGloriphyCheckpointsForSf(initialSf);
+  syncSfCompatibility(initialSf);
+}
+
+function updateGloriphyCheckpointsForSf(sf) {
+  const gsel = $("gloriphy_checkpoint");
+  const gloriphyOpt = $("gloriphy-option");
+  if (!gsel || !capabilities) return;
+
+  gsel.innerHTML = "";
+  const matching = (capabilities.gloriphy_checkpoints || []).filter((ck) => ck.sf === sf);
+  for (const ck of matching) {
+    const opt = document.createElement("option");
+    opt.value = ck.id;
+    opt.textContent = ck.label;
+    if (ck.is_default) opt.selected = true;
+    gsel.appendChild(opt);
+  }
+
+  if (gloriphyOpt) {
+    if (!capabilities.gloriphy_available) {
+      gloriphyOpt.disabled = true;
+      gloriphyOpt.textContent = "GLoRiPHY (neural) — checkpoints unavailable";
+    } else if (matching.length === 0) {
+      gloriphyOpt.disabled = true;
+      gloriphyOpt.textContent = `GLoRiPHY (neural) — SF${sf} checkpoint not ready`;
+    } else {
+      gloriphyOpt.disabled = false;
+      gloriphyOpt.textContent = "GLoRiPHY (neural)";
+    }
+  }
+}
+
+function syncSfCompatibility(sf) {
+  const caloraOpt = $("preamble_detection_method")?.querySelector('option[value="calora"]');
+  if (caloraOpt) {
+    caloraOpt.disabled = (sf !== 7);
+    if (sf !== 7 && $("preamble_detection_method").value === "calora") {
+      $("preamble_detection_method").value = "conventional";
+      $("calora-checkpoint-row").hidden = true;
+      applyMethodDefaults("conventional");
+    }
+  }
+
+  const loraseekOpt = $("loraseek-option");
+  if (loraseekOpt && capabilities?.loraseek_available) {
+    loraseekOpt.disabled = (sf !== 7);
+    if (sf !== 7 && $("symbol_decoding_method").value === "loraseek") {
+      $("symbol_decoding_method").value = "conventional";
+      $("loraseek-checkpoint-row").hidden = true;
+    }
+  }
+
+  const neloraOpt = $("nelora-option");
+  if (neloraOpt && capabilities?.nelora_available) {
+    neloraOpt.disabled = (sf !== 7);
+    if (sf !== 7 && $("symbol_decoding_method").value === "nelora") {
+      $("symbol_decoding_method").value = "conventional";
+    }
+  }
+
+  const currentDemod = $("symbol_decoding_method").value;
+  if (currentDemod === "gloriphy") {
+    const matching = (capabilities?.gloriphy_checkpoints || []).filter((ck) => ck.sf === sf);
+    if (matching.length === 0) {
+      $("symbol_decoding_method").value = "conventional";
+      $("gloriphy-checkpoint-row").hidden = true;
+    }
+  }
 }
 
 $("preamble_detection_method").addEventListener("change", (e) => {
   $("calora-checkpoint-row").hidden = e.target.value !== "calora";
   applyMethodDefaults(e.target.value);
+});
+
+$("symbol_decoding_method").addEventListener("change", (e) => {
+  $("loraseek-checkpoint-row").hidden = e.target.value !== "loraseek";
+  $("gloriphy-checkpoint-row").hidden = e.target.value !== "gloriphy";
 });
 
 // ── Packets-per-bin live hint ────────────────────────────────────────────────────────
@@ -108,7 +212,7 @@ function collectConfig() {
   const method = $("preamble_detection_method").value;
   return {
     client: {
-      sf: 7,
+      sf: Number($("sf").value) || 7,
       bw: Number($("bw").value),
       fs: Number($("fs").value),
       n_packets: Number($("n_packets").value),
@@ -122,6 +226,8 @@ function collectConfig() {
       preamble_detection_method: method,
       calora_checkpoint: method === "calora" ? $("calora_checkpoint").value : null,
       symbol_decoding_method: $("symbol_decoding_method").value,
+      loraseek_checkpoint: $("symbol_decoding_method").value === "loraseek" ? $("loraseek_checkpoint").value : null,
+      gloriphy_checkpoint: $("symbol_decoding_method").value === "gloriphy" ? $("gloriphy_checkpoint").value : null,
       toggles: {
         apply_cfo_correction: $("apply_cfo_correction").checked,
         apply_sto_correction: $("apply_sto_correction").checked,
@@ -137,6 +243,11 @@ function collectConfig() {
 }
 
 function fillFormFromConfig(clientConfig, serverConfig) {
+  if (clientConfig.sf) {
+    $("sf").value = clientConfig.sf;
+    updateGloriphyCheckpointsForSf(clientConfig.sf);
+    syncSfCompatibility(clientConfig.sf);
+  }
   $("bw").value = clientConfig.bw;
   $("fs").value = clientConfig.fs;
   $("n_packets").value = clientConfig.n_packets;
@@ -152,6 +263,10 @@ function fillFormFromConfig(clientConfig, serverConfig) {
   $("calora-checkpoint-row").hidden = serverConfig.preamble_detection_method !== "calora";
   if (serverConfig.calora_checkpoint) $("calora_checkpoint").value = serverConfig.calora_checkpoint;
   $("symbol_decoding_method").value = serverConfig.symbol_decoding_method;
+  $("loraseek-checkpoint-row").hidden = serverConfig.symbol_decoding_method !== "loraseek";
+  $("gloriphy-checkpoint-row").hidden = serverConfig.symbol_decoding_method !== "gloriphy";
+  if (serverConfig.loraseek_checkpoint) $("loraseek_checkpoint").value = serverConfig.loraseek_checkpoint;
+  if (serverConfig.gloriphy_checkpoint) $("gloriphy_checkpoint").value = serverConfig.gloriphy_checkpoint;
 
   // Fall back to the SAME run's method-appropriate defaults (never a hardcoded CALoRa-
   // shaped guess) for any field the loaded config happens to be missing — then pin every
@@ -269,16 +384,32 @@ export function datasetImpairmentInfo(clientConfig) {
 }
 
 function configSummary(clientConfig, serverConfig) {
+  if (!clientConfig) clientConfig = {};
+  if (!serverConfig) serverConfig = {};
+
   const method = serverConfig.preamble_detection_method === "calora"
     ? `CALoRa (${(serverConfig.calora_checkpoint || "?").replace(".pth", "")})`
     : "Conventional";
-  const demod = serverConfig.symbol_decoding_method === "nelora" ? "NeLoRa" : "conv demod";
+  let demod = "conv demod";
+  if (serverConfig.symbol_decoding_method === "nelora") {
+    demod = "NeLoRa";
+  } else if (serverConfig.symbol_decoding_method === "loraseek") {
+    const ckpt = (serverConfig.loraseek_checkpoint || "90000").replace(".pkl", "").replace("_LoRaSeek", "");
+    demod = `LoRaSeek (${ckpt})`;
+  } else if (serverConfig.symbol_decoding_method === "gloriphy") {
+    const ckpt = (serverConfig.gloriphy_checkpoint || "default").split("/").pop().replace("best_conformer_jgj.pkl", "").replace(/^_|_$/g, "");
+    demod = `GLoRiPHY (${ckpt})`;
+  }
   const t = serverConfig.toggles || {};
   const corr = [t.apply_cfo_correction !== false ? "CFO" : null,
                 t.apply_sto_correction !== false ? "STO" : null].filter(Boolean).join("+") || "no correction";
   const dataTag = datasetImpairmentInfo(clientConfig);
-  return `${method} [${dataTag}] + ${demod} · ${corr} · SF${clientConfig.sf} ${clientConfig.bw / 1000}kHz@${clientConfig.fs / 1000}kHz · `
-       + `SNR ${clientConfig.snr_db_range[0]}..${clientConfig.snr_db_range[1]}`;
+  const bwStr = clientConfig.bw ? ` ${clientConfig.bw / 1000}kHz` : "";
+  const fsStr = clientConfig.fs ? `@${clientConfig.fs / 1000}kHz` : "";
+  const snrStr = Array.isArray(clientConfig.snr_db_range) && clientConfig.snr_db_range.length >= 2
+    ? ` · SNR ${clientConfig.snr_db_range[0]}..${clientConfig.snr_db_range[1]}`
+    : "";
+  return `${method} [${dataTag}] + ${demod} · ${corr} · SF${clientConfig.sf ?? 7}${bwStr}${fsStr}${snrStr}`;
 }
 
 async function refreshHistory() {
@@ -522,9 +653,250 @@ document.querySelectorAll(".scope-btn").forEach((btn) => {
   });
 });
 
+// ── Second Page: Navigation & Single-Frame Symbol Benchmark ──────────────────────────
+let singleFrameCharts = null;
+
+function setupNavigation() {
+  const tabs = document.querySelectorAll(".nav-tab");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      const targetId = tab.dataset.target;
+      document.querySelectorAll(".page-container").forEach((page) => {
+        page.hidden = (page.id !== targetId);
+      });
+      if (targetId === "page-single-frame" && !singleFrameCharts) {
+        singleFrameCharts = createSingleFrameCharts();
+      }
+    });
+  });
+}
+
+function setupSingleFrameControls() {
+  $("single-apply-cfo")?.addEventListener("change", (e) => {
+    $("single-cfo-row").hidden = !e.target.checked;
+  });
+  $("single-apply-sto")?.addEventListener("change", (e) => {
+    $("single-sto-row").hidden = !e.target.checked;
+  });
+
+  $("single-frame-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("single-run-btn");
+    const errorEl = $("single-error");
+    errorEl.hidden = true;
+    btn.disabled = true;
+    btn.textContent = "Evaluating 5 Models...";
+
+    const nSymbols = Number($("single-n-symbols").value) || 10;
+    if (nSymbols < 1 || nSymbols > 1000) {
+      errorEl.textContent = "Payload length must be between 1 and 1000 symbols.";
+      errorEl.hidden = false;
+      btn.disabled = false;
+      btn.textContent = "Evaluate 5 Models";
+      return;
+    }
+
+    const payload = {
+      sf: Number($("single-sf").value) || 7,
+      bw: 125000,
+      fs: 1000000,
+      n_symbols: nSymbols,
+      snr_db: Number($("single-snr").value) ?? 10,
+      apply_cfo: $("single-apply-cfo").checked,
+      cfo_hz: Number($("single-cfo-hz").value) || 0,
+      apply_sto: $("single-apply-sto").checked,
+      sto_samples: Number($("single-sto-samp").value) || 0,
+      apply_compensation: $("single-apply-compensation")?.checked ?? true,
+      seed: Number($("single-seed").value) ?? -1,
+    };
+
+    try {
+      const res = await api.runSingleFrameBenchmark(payload);
+      renderSingleFrameResults(res);
+    } catch (err) {
+      errorEl.textContent = err.message || "Failed to run single-frame benchmark.";
+      errorEl.hidden = false;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Evaluate 5 Models";
+    }
+  });
+}
+
+function renderSingleFrameResults(res) {
+  $("single-results-placeholder").hidden = true;
+  $("single-results-container").hidden = false;
+
+  // Update summary chips
+  $("summary-chip-sf").textContent = `SF${res.sf}`;
+  $("summary-chip-snr").textContent = `SNR: ${res.snr_db} dB`;
+
+  if (res.apply_cfo) {
+    if (res.apply_compensation && res.sync_success) {
+      $("summary-chip-cfo").textContent = `CFO: ${res.cfo_applied_hz} Hz (Est: ${res.cfo_estimated_hz} Hz, Res: ${res.residual_cfo_hz} Hz)`;
+    } else if (res.apply_compensation && !res.sync_success) {
+      $("summary-chip-cfo").textContent = `CFO: ${res.cfo_applied_hz} Hz (Sync Failed)`;
+    } else {
+      $("summary-chip-cfo").textContent = `CFO: ${res.cfo_applied_hz} Hz (Raw / Uncompensated)`;
+    }
+  } else {
+    $("summary-chip-cfo").textContent = "CFO: None";
+  }
+
+  if (res.apply_sto) {
+    if (res.apply_compensation && res.sync_success) {
+      $("summary-chip-sto").textContent = `STO: ${res.sto_applied_samp} samp (Est: ${res.sto_estimated_samp} samp)`;
+    } else {
+      $("summary-chip-sto").textContent = `STO: ${res.sto_applied_samp} samp (Raw)`;
+    }
+  } else {
+    $("summary-chip-sto").textContent = "STO: None";
+  }
+
+  const syncChip = $("summary-chip-sync");
+  if (syncChip) {
+    if (!res.apply_cfo && !res.apply_sto) {
+      syncChip.textContent = "Sync: Nominal";
+    } else if (res.apply_compensation) {
+      syncChip.textContent = res.sync_success ? "Sync: Locked & Compensated" : "Sync: Failed (Preamble Lost)";
+    } else {
+      syncChip.textContent = "Sync: Bypassed (Raw Channel)";
+    }
+  }
+
+  $("summary-chip-symbols").textContent = `${res.n_symbols} symbols`;
+
+  // Render Table
+  const tbody = $("single-models-body");
+  tbody.innerHTML = "";
+  const order = [
+    "basic_single_band",
+    "dechirp_downsampled",
+    "conventional",
+    "nelora",
+    "calora",
+    "loraseek",
+    "gloriphy",
+  ];
+
+  for (const key of order) {
+    const m = res.models[key];
+    if (!m) continue;
+
+    const tr = document.createElement("tr");
+
+    let accBadgeHtml;
+    let matchedHtml;
+    let timeHtml;
+
+    if (m.available && m.accuracy_pct !== undefined) {
+      const accClass = m.accuracy_pct === 100 ? "perfect" : (m.accuracy_pct >= 80 ? "good" : "poor");
+      accBadgeHtml = `<span class="acc-badge ${accClass}">${m.accuracy_pct.toFixed(1)}%</span>`;
+      matchedHtml = `<strong>${m.matched}</strong> / ${m.total}`;
+      timeHtml = `${m.execution_time_ms.toFixed(1)} ms`;
+    } else {
+      accBadgeHtml = `<span class="acc-badge na">N/A</span>`;
+      matchedHtml = `<span style="color:var(--text-dim);">-</span>`;
+      timeHtml = `<span style="color:var(--text-dim);">-</span>`;
+    }
+
+    const statusBadge = m.available
+      ? `<span class="status-badge completed">Ready</span>`
+      : `<span class="status-badge cancelled" title="${m.status || ''}">Unavailable</span>`;
+
+    const refMark = (key === "conventional")
+      ? `<a href="#single-reference-card" class="ref-cite-mark" title="Reference: Xu et al., ACM TOSN">[1]</a>`
+      : "";
+
+    tr.innerHTML = `
+      <td><span class="model-pill ${key}">${m.name}</span>${refMark}</td>
+      <td>${statusBadge}</td>
+      <td>${accBadgeHtml}</td>
+      <td>${matchedHtml}</td>
+      <td>${timeHtml}</td>
+      <td style="color:var(--text-dim); font-size:11px;">${m.notes || m.status}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  // Update Charts
+  if (!singleFrameCharts) {
+    singleFrameCharts = createSingleFrameCharts();
+  }
+  updateSingleFrameCharts(singleFrameCharts, res.models);
+
+  // Render Symbol-by-Symbol Breakdown Table
+  const gt = res.ground_truth_symbols || [];
+  const totalSyms = res.n_symbols || gt.length;
+  const thead = $("single-symbols-head");
+  const sbody = $("single-symbols-body");
+  const hintEl = $("single-symbols-hint");
+
+  const displayCount = Math.min(gt.length, 64);
+  if (hintEl) {
+    if (totalSyms > 64) {
+      hintEl.textContent = `Showing first 64 of ${totalSyms} symbols (${totalSyms - 64} omitted from table view). Green indicates exact match with Ground Truth; Red indicates error. Overall metrics above evaluate all ${totalSyms} symbols.`;
+    } else {
+      hintEl.textContent = "Green indicates exact match with Ground Truth; Red indicates decoding error.";
+    }
+  }
+
+  thead.innerHTML = `
+    <tr>
+      <th>Symbol #</th>
+      <th>Ground Truth</th>
+      <th>FFT (Decimation 1/8)</th>
+      <th>FFT (Downsample Polyphase)</th>
+      <th>FFT Without Downsample<a href="#single-reference-card" class="ref-cite-mark" title="Reference: Xu et al., ACM TOSN">[1]</a></th>
+      <th>NeLoRa</th>
+      <th>CALoRa</th>
+      <th>LoRaSeek</th>
+      <th>GLoRiPhy</th>
+    </tr>
+  `;
+
+  const rows = [];
+  for (let i = 0; i < displayCount; i++) {
+    const gtVal = gt[i];
+
+    let rowHtml = `<tr>
+      <td style="font-weight:600; color:var(--text-dim);">#${i + 1}</td>
+      <td class="symbol-gt-cell">${gtVal}</td>
+    `;
+
+    for (const key of order) {
+      const m = res.models[key];
+      if (m && m.available && m.symbols && m.symbols[i] !== undefined) {
+        const pred = m.symbols[i];
+        const matchClass = (pred === gtVal) ? "symbol-match-ok" : "symbol-match-err";
+        rowHtml += `<td class="${matchClass}">${pred}</td>`;
+      } else {
+        rowHtml += `<td class="symbol-match-na">—</td>`;
+      }
+    }
+
+    rowHtml += `</tr>`;
+    rows.push(rowHtml);
+  }
+
+  if (totalSyms > 64) {
+    rows.push(`<tr>
+      <td colspan="9" style="text-align: center; color: var(--text-dim); font-style: italic; padding: 10px; background: #fafaf9;">
+        ... ${totalSyms - 64} additional symbols omitted (table capped at 64 samples). All ${totalSyms} symbols were benchmarked in the metrics above.
+      </td>
+    </tr>`);
+  }
+
+  sbody.innerHTML = rows.join("");
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────────────
 (async function init() {
   wireTouchTracking();
+  setupNavigation();
+  setupSingleFrameControls();
   applyMethodDefaults($("preamble_detection_method").value); // matches the <select>'s own default
   updatePacketsPerBinHint();
   await loadCapabilities().catch((e) => console.error("capabilities failed", e));

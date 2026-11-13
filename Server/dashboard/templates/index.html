@@ -14,6 +14,16 @@
   <div id="header-status" class="header-status"></div>
 </header>
 
+<nav class="app-nav">
+  <button type="button" class="nav-tab active" id="tab-sweep" data-target="page-sweep">
+    <span class="nav-icon">📊</span> Preamble &amp; Demod Sweep
+  </button>
+  <button type="button" class="nav-tab" id="tab-single-frame" data-target="page-single-frame">
+    <span class="nav-icon">🔬</span> Single-Frame Symbol Benchmark
+  </button>
+</nav>
+
+<div id="page-sweep" class="page-container">
 <div class="app-layout">
   <aside class="sidebar">
     <form id="config-form">
@@ -21,7 +31,7 @@
         <legend>Client &mdash; packet generation</legend>
 
         <label>Spreading factor
-          <input type="number" id="sf" value="7" disabled title="SF8+ not yet supported by CALoRa/NeLoRa">
+          <input type="number" id="sf" value="7" disabled title="Locked to SF7 to ensure fair, single-variable comparison across all models">
         </label>
         <label>Bandwidth (Hz)
           <input type="number" id="bw" value="125000" step="1000" required>
@@ -72,7 +82,18 @@
           <select id="symbol_decoding_method">
             <option value="conventional">Conventional (dechirp)</option>
             <option value="nelora" id="nelora-option">NeLoRa (neural)</option>
+            <option value="loraseek" id="loraseek-option">LoRaSeek (neural)</option>
+            <option value="gloriphy" id="gloriphy-option">GLoRiPHY (neural)</option>
           </select>
+        </label>
+        <label id="loraseek-checkpoint-row" hidden>LoRaSeek checkpoint
+          <select id="loraseek_checkpoint">
+            <option value="90000_LoRaSeek.pkl" selected>90000_LoRaSeek.pkl (default)</option>
+            <option value="75000_LoRaSeek.pkl">75000_LoRaSeek.pkl (best model)</option>
+          </select>
+        </label>
+        <label id="gloriphy-checkpoint-row" hidden>GLoRiPHY checkpoint
+          <select id="gloriphy_checkpoint"></select>
         </label>
 
         <label class="checkbox"><input type="checkbox" id="apply_cfo_correction" checked> Apply CFO correction</label>
@@ -179,6 +200,161 @@
     <tbody id="history-body"></tbody>
   </table>
 </section>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- Page 2: Single-Frame Symbol Benchmark                                 -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="page-single-frame" class="page-container" hidden>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <form id="single-frame-form">
+        <fieldset>
+          <legend>Signal Parameters</legend>
+          <label>Spreading Factor
+            <select id="single-sf">
+              <option value="7" selected>SF7 (Conventional, NeLoRa, CALoRa, LoRaSeek)</option>
+              <option value="8">SF8 (Conventional, GLoRiPhy)</option>
+            </select>
+          </label>
+          <div class="param-badge-row">
+            <span class="badge">BW: 125 kHz (fixed)</span>
+            <span class="badge">Fs: 1 MHz (fixed)</span>
+          </div>
+          <label>Payload Length (symbols)
+            <input type="number" id="single-n-symbols" value="10" min="1" max="1000" required>
+          </label>
+          <label>Channel SNR (dB)
+            <input type="number" id="single-snr" value="10" step="1" required>
+          </label>
+          <label>Random Seed <span class="hint-inline">(-1 = random)</span>
+            <input type="number" id="single-seed" value="0">
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Impairments (Optional)</legend>
+          <label class="checkbox">
+            <input type="checkbox" id="single-apply-cfo"> Add Carrier Frequency Offset (CFO)
+          </label>
+          <div id="single-cfo-row" class="sub-param-row" hidden>
+            <label>CFO (Hz)
+              <input type="number" id="single-cfo-hz" value="500" step="50">
+            </label>
+          </div>
+
+          <label class="checkbox" style="margin-top: 10px;">
+            <input type="checkbox" id="single-apply-sto"> Add Sampling Time Offset (STO)
+          </label>
+          <div id="single-sto-row" class="sub-param-row" hidden>
+            <label>STO (samples)
+              <input type="number" id="single-sto-samp" value="20" step="1" min="1" max="100">
+            </label>
+          </div>
+
+          <label class="checkbox" style="margin-top: 10px;">
+            <input type="checkbox" id="single-apply-compensation" checked> Apply Preamble Sync &amp; Offset Compensation
+          </label>
+          <p class="hint" style="margin: 4px 0 0 20px;">Uncheck to evaluate models on raw uncompensated signal (observe CFO bin-shifts / STO errors directly).</p>
+        </fieldset>
+
+        <button type="submit" id="single-run-btn" class="btn-primary" style="width: 100%;">Evaluate Models</button>
+        <div id="single-error" class="error-banner" hidden></div>
+      </form>
+    </aside>
+
+    <main class="main-content">
+      <div id="single-results-placeholder" class="placeholder-card">
+        <p style="font-size: 15px; font-weight: 600; margin-bottom: 6px;">Single-Frame Symbol Decoding Benchmark</p>
+        <p>Evaluates symbol decoding methods side-by-side on a single LoRa frame:</p>
+        <p style="margin-top: 8px;">
+          <strong>Basic Dechirping FFT (Direct Decimation 1/8)</strong> &bull;
+          <strong>Dechirping FFT with Downsampling (Polyphase)</strong> &bull;
+          <strong>Estimate Symbol without Downsampling (Dual-Energy Sum)<a href="#single-reference-card" class="ref-cite-mark">[1]</a></strong> &bull;
+          <strong>NeLoRa</strong> &bull;
+          <strong>CALoRa</strong> &bull;
+          <strong>LoRaSeek</strong> &bull;
+          <strong>GLoRiPhy</strong>
+        </p>
+        <p style="margin-top: 12px; font-size: 13px;">Configure parameters on the left and click <strong>Evaluate Models</strong> to start.</p>
+      </div>
+
+      <div id="single-results-container" hidden>
+        <div class="result-summary-bar">
+          <div class="summary-chip accent" id="summary-chip-sf">SF7</div>
+          <div class="summary-chip">125 kHz @ 1 MHz</div>
+          <div class="summary-chip" id="summary-chip-snr">SNR: 10 dB</div>
+          <div class="summary-chip" id="summary-chip-cfo">CFO: None</div>
+          <div class="summary-chip" id="summary-chip-sto">STO: None</div>
+          <div class="summary-chip" id="summary-chip-sync">Sync: Active</div>
+          <div class="summary-chip" id="summary-chip-symbols">10 symbols</div>
+        </div>
+
+        <div class="chart-card chart-card-wide" style="margin-top: 10px;">
+          <h3>Side-by-Side Model Performance</h3>
+          <div class="table-scroll">
+            <table class="benchmark-models-table" id="single-models-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Status</th>
+                  <th>Accuracy</th>
+                  <th>Matched / Total</th>
+                  <th>Execution Time</th>
+                  <th>Method Description</th>
+                </tr>
+              </thead>
+              <tbody id="single-models-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="chart-grid" style="margin-top: 12px;">
+          <div class="chart-card">
+            <h3>Symbol Accuracy Rate (%)</h3>
+            <canvas id="chart-single-acc"></canvas>
+          </div>
+          <div class="chart-card">
+            <h3>Execution Latency (ms)</h3>
+            <canvas id="chart-single-latency"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-card chart-card-wide" style="margin-top: 12px;">
+          <h3>Symbol-by-Symbol Decoding Breakdown</h3>
+          <p class="hint" id="single-symbols-hint">Green indicates exact match with Ground Truth; Red indicates decoding error.</p>
+          <div class="table-scroll table-scroll-bounded" style="margin-top: 8px;">
+            <table class="symbol-breakdown-table" id="single-symbols-table">
+              <thead id="single-symbols-head"></thead>
+              <tbody id="single-symbols-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="reference-card" id="single-reference-card" style="margin-top: 16px;">
+        <div class="reference-card-header">
+          <svg class="reference-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          <h3>References &amp; Method Citations</h3>
+        </div>
+        <div class="reference-item">
+          <div class="reference-badge">[1]</div>
+          <div class="reference-content">
+            <div class="reference-title">From Demodulation to Decoding: Toward Complete LoRa PHY Understanding and Implementation</div>
+            <div class="reference-authors">Zhenqiang Xu, Shuai Tong, Pengjin Xie, Jiliang Wang</div>
+            <div class="reference-details">
+              <span class="ref-venue">ACM Transactions on Sensor Networks (TOSN) / ACM SenSys</span>
+              <p class="ref-desc">Demodulation method: <em>Estimate Symbol without Downsampling (Dual-Energy Sum)</em>. In oversampled discrete-time dechirping, chirp frequencies wrap across \([-BW/2, +BW/2]\), dividing symbol energy into positive and negative frequency components. Summing peak energy across both conjugate bands avoids boundary loss and achieves complete energy recovery.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
 
 <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

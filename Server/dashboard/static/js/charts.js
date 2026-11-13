@@ -160,3 +160,125 @@ export function updateCharts(charts, runs, scope) {
   }));
   charts.nbin.update();
 }
+
+export function createSingleFrameCharts() {
+  const modelColors = {
+    basic_single_band: "#94a3b8",
+    dechirp_downsampled: "#64748b",
+    conventional: "#10b981",
+    nelora: "#f59e0b",
+    calora: "#3b82f6",
+    loraseek: "#8b5cf6",
+    gloriphy: "#ec4899",
+  };
+
+  const accEl = document.getElementById("chart-single-acc");
+  const latEl = document.getElementById("chart-single-latency");
+  if (!accEl || !latEl) return null;
+
+  const accChart = new Chart(accEl.getContext("2d"), {
+    type: "bar",
+    data: { labels: [], datasets: [] },
+    options: {
+      responsive: true,
+      animation: { duration: 300 },
+      scales: {
+        y: {
+          min: 0,
+          max: 100,
+          title: { display: true, text: "Accuracy (%)" },
+          ticks: { callback: (v) => v + "%" },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => `Accuracy: ${item.raw}%`,
+          },
+        },
+      },
+    },
+  });
+
+  const latChart = new Chart(latEl.getContext("2d"), {
+    type: "bar",
+    data: { labels: [], datasets: [] },
+    options: {
+      responsive: true,
+      animation: { duration: 300 },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: "Latency (ms)" },
+          ticks: { callback: (v) => v + " ms" },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (item) => `Latency: ${item.raw} ms`,
+          },
+        },
+      },
+    },
+  });
+
+  return { acc: accChart, latency: latChart, colors: modelColors };
+}
+
+export function updateSingleFrameCharts(charts, modelsData) {
+  if (!charts) return;
+  const labels = [];
+  const accValues = [];
+  const latValues = [];
+  const bgColors = [];
+
+  const order = [
+    "basic_single_band",
+    "dechirp_downsampled",
+    "conventional",
+    "nelora",
+    "calora",
+    "loraseek",
+    "gloriphy",
+  ];
+  const shortNames = {
+    basic_single_band: "FFT (Decimation 1/8)",
+    dechirp_downsampled: "FFT (Downsample Polyphase)",
+    conventional: "FFT (Without Downsample) [1]",
+    nelora: "NeLoRa",
+    calora: "CALoRa",
+    loraseek: "LoRaSeek",
+    gloriphy: "GLoRiPhy",
+  };
+  for (const key of order) {
+    const m = modelsData[key];
+    if (!m) continue;
+    labels.push(shortNames[key] || m.name);
+    accValues.push(m.available && m.accuracy_pct !== undefined ? m.accuracy_pct : 0);
+    latValues.push(m.available && m.execution_time_ms !== undefined ? m.execution_time_ms : 0);
+    bgColors.push(m.available ? charts.colors[key] : "#cbd5e1");
+  }
+
+  charts.acc.data.labels = labels;
+  charts.acc.data.datasets = [
+    {
+      data: accValues,
+      backgroundColor: bgColors,
+      borderRadius: 4,
+    },
+  ];
+  charts.acc.update();
+
+  charts.latency.data.labels = labels;
+  charts.latency.data.datasets = [
+    {
+      data: latValues,
+      backgroundColor: bgColors,
+      borderRadius: 4,
+    },
+  ];
+  charts.latency.update();
+}

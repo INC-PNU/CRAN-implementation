@@ -74,11 +74,13 @@ def iq_to_symbol_chunks(iq: np.ndarray, sf: int, bw: int, fs: int,
             chunk = chunk * ref
 
         x_chunk = torch.from_numpy(chunk)
+        stft_win = torch.hann_window(win_len)
         Z_chunk = torch.stft(
             x_chunk,
             n_fft=nfft,
             hop_length=hop,
             win_length=win_len,
+            window=stft_win,
             return_complex=True,
             pad_mode="constant",
         )

@@ -93,7 +93,18 @@ def make_label(client_config: dict, server_config: dict) -> str:
         method_label = "Conventional"
 
     demod = server_config.get("symbol_decoding_method", "conventional")
-    demod_label = "NeLoRa demod" if demod == "nelora" else "conv demod"
+    if demod == "nelora":
+        demod_label = "NeLoRa demod"
+    elif demod == "loraseek":
+        ckpt = server_config.get("loraseek_checkpoint") or "90000"
+        ckpt_short = ckpt.replace(".pkl", "").replace("_LoRaSeek", "")
+        demod_label = f"LoRaSeek ({ckpt_short}) demod"
+    elif demod == "gloriphy":
+        ckpt = server_config.get("gloriphy_checkpoint") or "default"
+        ckpt_short = ckpt.split("/")[-1].replace("best_conformer_jgj.pkl", "").strip("_")
+        demod_label = f"GLoRiPHY ({ckpt_short}) demod"
+    else:
+        demod_label = "conv demod"
 
     toggles = server_config.get("toggles", {})
     corr_bits = []

@@ -51,3 +51,11 @@ export function cancelRun(runId) {
 export function deleteRun(runId) {
   return fetch(`/api/runs/${runId}`, { method: "DELETE" }).then(asJson);
 }
+
+export function runSingleFrameBenchmark(params) {
+  return fetch("/api/benchmark/single-frame", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  }).then(asJson);
+}

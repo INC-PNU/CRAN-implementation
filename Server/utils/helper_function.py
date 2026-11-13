@@ -260,7 +260,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
     down_chirp_signal = np.conjugate(up_chirp_signal)
 
     symbol_time = opts.n_classes / opts.bw  # Symbol duration
-    t = np.arange(0, symbol_time, 1/opts.fs)
+    t = np.arange(framePerSymbol) / opts.fs
 
     global_index_that_start_a_down_chirp = None
     dechirped_max = []
@@ -511,7 +511,7 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
 
     cfo_test_boleh_delete_soon = CFO_FINAL
     # print("CFO FIn al:",CFO_FINAL)
-    correction_factor_by_cfo_total = np.exp(-1j * 2 * np.pi * ( cfo_test_boleh_delete_soon)* t)
+    correction_factor_by_cfo_total = np.exp(-1j * 2 * np.pi * (cfo_test_boleh_delete_soon) * t[:framePerSymbol])
 
     if sto_method == "v3":
         ################### MODUL STO V3 (closed form, up/down chirp pair) ###############
