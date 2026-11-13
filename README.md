@@ -51,11 +51,11 @@ This repository implements centralized multi-gateway diversity combining, carrie
 3. **7 Demodulation & Neural Decoding Algorithms**:
    - **Basic Dechirping FFT (Direct Decimation 1/8)**: Standard 1/8 decimation ($F_s \to BW$) with single-peak FFT argmax.
    - **Dechirping FFT with Downsampling (Polyphase)**: High-fidelity Nyquist anti-aliased downsampling (`scipy.signal.resample_poly`) + standard FFT.
-   - **Estimate Symbol without Downsampling (Dual-Energy Sum)**: Full sampling rate ($F_s = 1\text{ MHz}$) dual-peak energy combining across folded spectrum bins ([Xu et al., ACM TOSN 2024](https://doi.org/10.1145/3641822)).
-   - **NeLoRa**: STFT spectrogram denoiser (`maskCNNModel`) + hybrid neural classifier (`classificationHybridModel`), supporting both **SF7** and **SF8**.
-   - **CALoRa**: Preamble detector and CNN chirp restorer with post-denoised conventional or hybrid classification (**SF7**).
-   - **LoRaSeek**: STFT Transformer + Dual-Attention U-Net with Nyquist ISTFT reconstruction, supporting both **SF7** and **SF8**.
-   - **GLoRiPHY**: Conformer-based channel-aware generative denoiser with STFT/ISTFT reconstruction, supporting **SF8** and **SF9**.
+   - **Estimate Symbol without Downsampling (Dual-Energy Sum)**: Full sampling rate ($F_s = 1\text{ MHz}$) dual-peak energy combining across folded spectrum bins ([Xu et al., ACM TOSN 2024](https://dl.acm.org/doi/10.1145/3546869)).
+   - **NeLoRa**: STFT spectrogram denoiser (`maskCNNModel`) + hybrid neural classifier (`classificationHybridModel`), supporting both **SF7** and **SF8** ([Li et al., ACM SenSys 2021](https://dl.acm.org/doi/10.1145/3485730.3485928)).
+   - **CALoRa**: Preamble detector and CNN chirp restorer with post-denoised conventional or hybrid classification (**SF7**, [IEEE](https://ieeexplore.ieee.org/document/11386915)).
+   - **LoRaSeek**: STFT Transformer + Dual-Attention U-Net with Nyquist ISTFT reconstruction, supporting both **SF7** and **SF8** ([ACM MobiCom 2025](https://dl.acm.org/doi/10.1145/3680207.3765241)).
+   - **GLoRiPHY**: Conformer-based channel-aware generative denoiser with STFT/ISTFT reconstruction, supporting **SF8** and **SF9** ([ACM SenSys 2024](https://dl.acm.org/doi/10.1145/3666025.3699354)).
 
 4. **Interactive Analytics & Benchmark Dashboard**:
    - Built with Flask, vanilla ES6 JavaScript, and Chart.js.
@@ -166,11 +166,11 @@ python run_client.py            # or: python run_client.py --ver 1|2|3
 |---|---|---|---|---|
 | **Basic Dechirping FFT** | Classical DSP | All (SF7–SF12) | None (Analytical) | Direct 1/8 decimation + standard FFT argmax |
 | **Polyphase Downsampling** | Classical DSP | All (SF7–SF12) | None (Analytical) | `scipy.signal.resample_poly` Nyquist filtering |
-| **Without Downsampling** | Classical DSP | All (SF7–SF12) | None (Analytical) | [Xu et al., ACM TOSN 2024](https://doi.org/10.1145/3641822) [1] |
-| **NeLoRa** | Deep Learning | **SF7, SF8** | `75000` / `100000` (`.pkl`) | Undechirped STFT maskCNN + hybrid classifier |
-| **CALoRa** | Deep Learning | **SF7** (SF8 ready) | `chirp_restorer_sf7.pth` | CNN waveform restorer + preamble detector |
-| **LoRaSeek** | Deep Learning | **SF7, SF8** | `75000` / `90000` (`.pkl`) | STFT Dual-Attention U-Net + ISTFT dechirping |
-| **GLoRiPHY** | Deep Learning | **SF8, SF9** | `best_conformer_jgj.pkl` | Conformer generative channel-aware denoiser |
+| **Without Downsampling** | Classical DSP | All (SF7–SF12) | None (Analytical) | [Xu et al., ACM TOSN 2024][ref-1] |
+| **NeLoRa** | Deep Learning | **SF7, SF8** | `75000` / `100000` (`.pkl`) | [Li et al., ACM SenSys 2021][ref-2] |
+| **CALoRa** | Deep Learning | **SF7** (SF8 ready) | `chirp_restorer_sf7.pth` | [CALoRa, IEEE][ref-5] |
+| **LoRaSeek** | Deep Learning | **SF7, SF8** | `75000` / `90000` (`.pkl`) | [LoRaSeek, ACM MobiCom 2025][ref-3] |
+| **GLoRiPHY** | Deep Learning | **SF8, SF9** | `best_conformer_jgj.pkl` | [GLoRiPHY, ACM SenSys 2024][ref-4] |
 
 > For comprehensive model architectures, tensor shapes, and training checkpoints, see [Server/models/README.md](file:///c:/Users/priba/Sean-2025/INC-LAB/CRAN-implementation/Server/models/README.md).
 
@@ -227,8 +227,18 @@ To run the full C-RAN multi-gateway combining pipeline:
 
 ## References
 
-1. Zhenqiang Xu, Shuai Tong, Pengjin Xie, and Jiliang Wang. 2024. *From Demodulation to Decoding: Toward Complete LoRa PHY Understanding and Implementation*. ACM Transactions on Sensor Networks (TOSN), 20(4), 1–28.
-2. NeLoRa: Neural LoRa Demodulation for Ultra-Low SNR IoT Networks.
-3. CALoRa: Content-Aware Preamble Detection and Waveform Restoration.
-4. LoRaSeek: STFT Transformer and Dual-Attention Spectrogram Denoising.
-5. GLoRiPHY: Generative Conformer Architecture for Long-Range Robust LoRa PHY.
+1. [ref-1]: https://dl.acm.org/doi/10.1145/3546869
+   **From Demodulation to Decoding (Dual-Band Dechirping)**: Zhenqiang Xu, Shuai Tong, Pengjin Xie, and Jiliang Wang. 2024. *From Demodulation to Decoding: Toward Complete LoRa PHY Understanding and Implementation*. ACM Transactions on Sensor Networks (TOSN), 20(4), 1–28.  
+   DOI: [https://dl.acm.org/doi/10.1145/3546869](https://dl.acm.org/doi/10.1145/3546869)
+2. [ref-2]: https://dl.acm.org/doi/10.1145/3485730.3485928
+   **NELoRa**: Chenning Li, Hanqing Guo, Shuai Tong, Xiao-Yang Liu, and Jiliang Wang. 2021. *NELoRa: Towards Ultra-low SNR LoRa Communication with Neural-enhanced Demodulation*. In Proceedings of the 19th ACM Conference on Embedded Networked Sensor Systems (SenSys '21), 1–14.  
+   DOI: [https://dl.acm.org/doi/10.1145/3485730.3485928](https://dl.acm.org/doi/10.1145/3485730.3485928)
+3. [ref-3]: https://dl.acm.org/doi/10.1145/3680207.3765241
+   **LoRaSeek**: *LoRaSeek: Boosting Denoising Ability in Neural-enhanced LoRa Decoder via Hierarchical Feature Extraction*. In Proceedings of the 31st Annual International Conference on Mobile Computing and Networking (MobiCom '25).  
+   DOI: [https://dl.acm.org/doi/10.1145/3680207.3765241](https://dl.acm.org/doi/10.1145/3680207.3765241)
+4. [ref-4]: https://dl.acm.org/doi/10.1145/3666025.3699354
+   **GLoRiPHY**: *Enhancing LoRa Reception with Generative Models: Channel-Aware Denoising of LoRaPHY Signals*. In Proceedings of the 22nd ACM Conference on Embedded Networked Sensor Systems (SenSys '24).  
+   DOI: [https://dl.acm.org/doi/10.1145/3666025.3699354](https://dl.acm.org/doi/10.1145/3666025.3699354)
+5. [ref-5]: https://ieeexplore.ieee.org/document/11386915
+   **CALoRa**: *CALoRa: Content-Aware Preamble Detection and Waveform Restoration for LoRa Networks*. IEEE.  
+   Link: [https://ieeexplore.ieee.org/document/11386915](https://ieeexplore.ieee.org/document/11386915)

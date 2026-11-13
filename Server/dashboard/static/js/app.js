@@ -864,8 +864,16 @@ function renderSingleFrameResults(res) {
       ? `<span class="status-badge completed">Ready</span>`
       : `<span class="status-badge cancelled" title="${m.status || ''}">Unavailable</span>`;
 
-    const refMark = (key === "conventional")
-      ? `<a href="#single-reference-card" class="ref-cite-mark" title="Reference: Xu et al., ACM TOSN">[1]</a>`
+    const REF_MAP = {
+      conventional: { num: 1, title: "Reference [1]: From Demodulation to Decoding (Dual-Band Dechirping) — Xu et al." },
+      nelora:       { num: 2, title: "Reference [2]: NELoRa — Li et al., ACM SenSys '21" },
+      loraseek:     { num: 3, title: "Reference [3]: LoRaSeek — ACM MobiCom '25" },
+      gloriphy:     { num: 4, title: "Reference [4]: GLoRiPHY — ACM SenSys '24" },
+      calora:       { num: 5, title: "Reference [5]: CALoRa — IEEE" },
+    };
+    const refInfo = REF_MAP[key];
+    const refMark = refInfo
+      ? `<a href="#ref-item-${refInfo.num}" class="ref-cite-mark" title="${refInfo.title}">[${refInfo.num}]</a>`
       : "";
 
     tr.innerHTML = `
@@ -907,11 +915,11 @@ function renderSingleFrameResults(res) {
       <th>Ground Truth</th>
       <th>FFT (Decimation 1/8)</th>
       <th>FFT (Downsample Polyphase)</th>
-      <th>FFT Without Downsample<a href="#single-reference-card" class="ref-cite-mark" title="Reference: Xu et al., ACM TOSN">[1]</a></th>
-      <th>NeLoRa</th>
-      <th>CALoRa</th>
-      <th>LoRaSeek</th>
-      <th>GLoRiPhy</th>
+      <th>FFT Without Downsample<a href="#ref-item-1" class="ref-cite-mark" title="Reference [1]: Xu et al.">[1]</a></th>
+      <th>NeLoRa<a href="#ref-item-2" class="ref-cite-mark" title="Reference [2]: Li et al., ACM SenSys '21">[2]</a></th>
+      <th>CALoRa<a href="#ref-item-5" class="ref-cite-mark" title="Reference [5]: IEEE">[5]</a></th>
+      <th>LoRaSeek<a href="#ref-item-3" class="ref-cite-mark" title="Reference [3]: ACM MobiCom '25">[3]</a></th>
+      <th>GLoRiPhy<a href="#ref-item-4" class="ref-cite-mark" title="Reference [4]: ACM SenSys '24">[4]</a></th>
     </tr>
   `;
 

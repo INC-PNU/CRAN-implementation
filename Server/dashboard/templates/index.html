@@ -273,11 +273,11 @@
         <p style="margin-top: 8px;">
           <strong>Basic Dechirping FFT (Direct Decimation 1/8)</strong> &bull;
           <strong>Dechirping FFT with Downsampling (Polyphase)</strong> &bull;
-          <strong>Estimate Symbol without Downsampling (Dual-Energy Sum)<a href="#single-reference-card" class="ref-cite-mark">[1]</a></strong> &bull;
-          <strong>NeLoRa</strong> &bull;
-          <strong>CALoRa</strong> &bull;
-          <strong>LoRaSeek</strong> &bull;
-          <strong>GLoRiPhy</strong>
+          <strong>Estimate Symbol without Downsampling (Dual-Energy Sum)<a href="#ref-item-1" class="ref-cite-mark">[1]</a></strong> &bull;
+          <strong>NeLoRa<a href="#ref-item-2" class="ref-cite-mark">[2]</a></strong> &bull;
+          <strong>CALoRa<a href="#ref-item-5" class="ref-cite-mark">[5]</a></strong> &bull;
+          <strong>LoRaSeek<a href="#ref-item-3" class="ref-cite-mark">[3]</a></strong> &bull;
+          <strong>GLoRiPhy<a href="#ref-item-4" class="ref-cite-mark">[4]</a></strong>
         </p>
         <p style="margin-top: 12px; font-size: 13px;">Configure parameters on the left and click <strong>Evaluate Models</strong> to start.</p>
       </div>
@@ -343,14 +343,83 @@
           </svg>
           <h3>References &amp; Method Citations</h3>
         </div>
-        <div class="reference-item">
+
+        <div class="reference-item" id="ref-item-1">
           <div class="reference-badge">[1]</div>
           <div class="reference-content">
-            <div class="reference-title">From Demodulation to Decoding: Toward Complete LoRa PHY Understanding and Implementation</div>
+            <div class="reference-title">
+              <a href="https://dl.acm.org/doi/10.1145/3546869" target="_blank" rel="noopener noreferrer">
+                From Demodulation to Decoding: Toward Complete LoRa PHY Understanding and Implementation (Dual-Band Dechirping)
+              </a>
+            </div>
             <div class="reference-authors">Zhenqiang Xu, Shuai Tong, Pengjin Xie, Jiliang Wang</div>
             <div class="reference-details">
-              <span class="ref-venue">ACM Transactions on Sensor Networks (TOSN) / ACM SenSys</span>
+              <span class="ref-venue">ACM Transactions on Sensor Networks (TOSN) &bull; <a href="https://dl.acm.org/doi/10.1145/3546869" target="_blank" rel="noopener noreferrer">https://dl.acm.org/doi/10.1145/3546869</a></span>
               <p class="ref-desc">Demodulation method: <em>Estimate Symbol without Downsampling (Dual-Energy Sum)</em>. In oversampled discrete-time dechirping, chirp frequencies wrap across \([-BW/2, +BW/2]\), dividing symbol energy into positive and negative frequency components. Summing peak energy across both conjugate bands avoids boundary loss and achieves complete energy recovery.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="reference-item" id="ref-item-2">
+          <div class="reference-badge">[2]</div>
+          <div class="reference-content">
+            <div class="reference-title">
+              <a href="https://dl.acm.org/doi/10.1145/3485730.3485928" target="_blank" rel="noopener noreferrer">
+                NELoRa: Towards Ultra-low SNR LoRa Communication with Neural-enhanced Demodulation
+              </a>
+            </div>
+            <div class="reference-authors">Chenning Li, Hanqing Guo, Shuai Tong, Xiao-Yang Liu, Jiliang Wang</div>
+            <div class="reference-details">
+              <span class="ref-venue">ACM SenSys 2021 &bull; <a href="https://dl.acm.org/doi/10.1145/3485730.3485928" target="_blank" rel="noopener noreferrer">https://dl.acm.org/doi/10.1145/3485730.3485928</a></span>
+              <p class="ref-desc">Demodulation method: <em>NeLoRa</em>. Employs a dilated convolutional neural network (maskCNN) to learn spectrogram-level noise patterns and denoise undechirped STFT representations, paired with a hybrid CNN-LSTM classifier that directly infers transmitted symbol indices at deep negative SNRs.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="reference-item" id="ref-item-3">
+          <div class="reference-badge">[3]</div>
+          <div class="reference-content">
+            <div class="reference-title">
+              <a href="https://dl.acm.org/doi/10.1145/3680207.3765241" target="_blank" rel="noopener noreferrer">
+                LoRaSeek: Boosting Denoising Ability in Neural-enhanced LoRa Decoder via Hierarchical Feature Extraction
+              </a>
+            </div>
+            <div class="reference-authors">ACM MobiCom 2025</div>
+            <div class="reference-details">
+              <span class="ref-venue">ACM MobiCom &bull; <a href="https://dl.acm.org/doi/10.1145/3680207.3765241" target="_blank" rel="noopener noreferrer">https://dl.acm.org/doi/10.1145/3680207.3765241</a></span>
+              <p class="ref-desc">Demodulation method: <em>LoRaSeek</em>. Uses STFT Transformer and dual-attention U-Net architectures to extract multi-scale hierarchical time-frequency features, performing waveform reconstruction via Nyquist ISTFT followed by conventional dechirp-FFT peak detection.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="reference-item" id="ref-item-4">
+          <div class="reference-badge">[4]</div>
+          <div class="reference-content">
+            <div class="reference-title">
+              <a href="https://dl.acm.org/doi/10.1145/3666025.3699354" target="_blank" rel="noopener noreferrer">
+                GLoRiPHY: Enhancing LoRa Reception with Generative Models: Channel-Aware Denoising of LoRaPHY Signals
+              </a>
+            </div>
+            <div class="reference-authors">ACM SenSys 2024</div>
+            <div class="reference-details">
+              <span class="ref-venue">ACM SenSys &bull; <a href="https://dl.acm.org/doi/10.1145/3666025.3699354" target="_blank" rel="noopener noreferrer">https://dl.acm.org/doi/10.1145/3666025.3699354</a></span>
+              <p class="ref-desc">Demodulation method: <em>GLoRiPHY</em>. Introduces channel-aware generative Conformer architectures combining convolutional layers and multi-head self-attention to recover corrupted LoRa chirp signals under harsh fading and extreme negative SNR conditions.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="reference-item" id="ref-item-5">
+          <div class="reference-badge">[5]</div>
+          <div class="reference-content">
+            <div class="reference-title">
+              <a href="https://ieeexplore.ieee.org/document/11386915" target="_blank" rel="noopener noreferrer">
+                CALoRa: Content-Aware Preamble Detection and Waveform Restoration for LoRa Networks
+              </a>
+            </div>
+            <div class="reference-authors">IEEE</div>
+            <div class="reference-details">
+              <span class="ref-venue">IEEE &bull; <a href="https://ieeexplore.ieee.org/document/11386915" target="_blank" rel="noopener noreferrer">https://ieeexplore.ieee.org/document/11386915</a></span>
+              <p class="ref-desc">Preamble detection &amp; restoration method: <em>CALoRa</em>. Uses deep convolutional neural networks for robust preamble location under severe CFO/STO offsets and reconstructs damaged time-domain chirp waveforms prior to decoding.</p>
             </div>
           </div>
         </div>

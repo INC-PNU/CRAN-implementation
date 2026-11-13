@@ -276,7 +276,7 @@ def evaluate_single_frame(
             "total": n_symbols,
             "accuracy_pct": round((matched / n_symbols) * 100.0, 2),
             "execution_time_ms": round(t_without, 2),
-            "notes": "Reference: From Demodulation to Decoding: Toward Complete LoRa PHY Understanding and Implementation (Zhenqiang Xu, Shuai Tong, Pengjin Xie, Jiliang Wang) [1]",
+            "notes": "Xu et al. [1] — Full sampling rate dual-band dechirping (energy fold sum)",
         }
     except Exception as exc:
         models_output["conventional"] = {
@@ -311,7 +311,7 @@ def evaluate_single_frame(
                 "total": n_symbols,
                 "accuracy_pct": round((matched / n_symbols) * 100.0, 2),
                 "execution_time_ms": round(t_nelora, 2),
-                "notes": f"maskCNN denoiser + hybrid classifier ({'SF7 100k' if sf == 7 else 'SF8 75k'})",
+                "notes": f"Li et al. [2] — maskCNN denoiser + hybrid classifier ({'SF7 100k' if sf == 7 else 'SF8 75k'})",
             }
         except Exception as exc:
             models_output["nelora"] = {
@@ -351,7 +351,7 @@ def evaluate_single_frame(
                 "total": n_symbols,
                 "accuracy_pct": round((matched / n_symbols) * 100.0, 2),
                 "execution_time_ms": round(t_calora, 2),
-                "notes": "CALoRa restorer + NeLoRa classifier",
+                "notes": "CALoRa [5] — CNN chirp restorer + hybrid classifier",
             }
         except Exception as exc:
             models_output["calora"] = {
@@ -390,7 +390,7 @@ def evaluate_single_frame(
                 "total": n_symbols,
                 "accuracy_pct": round((matched / n_symbols) * 100.0, 2),
                 "execution_time_ms": round(t_ls, 2),
-                "notes": f"LoRaSeekNet denoiser ({version_note}) + ISTFT + FFT",
+                "notes": f"LoRaSeek [3] — STFT Transformer + Dual-Attention U-Net ({version_note})",
             }
         except Exception as exc:
             models_output["loraseek"] = {
@@ -430,7 +430,7 @@ def evaluate_single_frame(
                 "total": n_symbols,
                 "accuracy_pct": round((matched / n_symbols) * 100.0, 2),
                 "execution_time_ms": round(t_gl, 2),
-                "notes": "Conformer denoiser + ISTFT + FFT",
+                "notes": f"GLoRiPHY [4] — Conformer generative channel-aware denoiser ({gl_ckpt})",
             }
         except Exception as exc:
             models_output["gloriphy"] = {
