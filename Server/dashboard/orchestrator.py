@@ -122,6 +122,12 @@ def validate_config(client_config: dict, server_config: dict) -> None:
         if not nelora_inference.NELORA_VALIDATED:
             raise ConfigError("symbol_decoding_method='nelora' is not available: "
                               "NeLoRa has not passed dashboard/validate_nelora.py yet.")
+        if sf not in nelora_inference.SUPPORTED_SFS:
+            raise ConfigError(f"symbol_decoding_method='nelora' does not have a checkpoint for SF{sf}. "
+                              f"Supported SFs: {nelora_inference.SUPPORTED_SFS}.")
+        ckpt = server_config.get("nelora_checkpoint")
+        if ckpt and ckpt not in nelora_inference.AVAILABLE_CHECKPOINTS:
+            raise ConfigError(f"unknown nelora_checkpoint: {ckpt!r}")
     if demod == "loraseek":
         if not loraseek_inference.LORASEEK_AVAILABLE:
             raise ConfigError("symbol_decoding_method='loraseek' is not available: "
@@ -336,7 +342,7 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
     elif server_config["symbol_decoding_method"] == "nelora":
         demod_symbols = nelora_inference.demodulate_payload_nelora(
             payload_corrected, opts.sf, opts.bw, opts.fs,
-            checkpoint_id=server_config.get("nelora_checkpoint", "100000"))
+            checkpoint_id=server_config.get("nelora_checkpoint"))
     elif server_config["symbol_decoding_method"] == "gloriphy":
         ckpt = server_config.get("gloriphy_checkpoint")
         pre_start = max(0, payload_start - int(12.25 * framePerSymbol))

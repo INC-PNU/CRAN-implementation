@@ -88,10 +88,12 @@ async function loadCapabilities() {
   }
 
   const neloraOpt = $("nelora-option");
-  neloraOpt.disabled = !capabilities.nelora_available;
-  neloraOpt.textContent = capabilities.nelora_available
-    ? "NeLoRa (neural)"
-    : "NeLoRa (neural) — not yet validated";
+  if (neloraOpt) {
+    neloraOpt.disabled = !capabilities.nelora_available;
+    neloraOpt.textContent = capabilities.nelora_available
+      ? "NeLoRa (neural)"
+      : "NeLoRa (neural) — not yet validated";
+  }
 
   const loraseekOpt = $("loraseek-option");
   if (loraseekOpt) {
@@ -101,21 +103,69 @@ async function loadCapabilities() {
       : "LoRaSeek (neural) — checkpoint unavailable";
   }
 
-  if (capabilities.loraseek_checkpoints && capabilities.loraseek_checkpoints.length) {
-    const lsel = $("loraseek_checkpoint");
-    lsel.innerHTML = "";
-    for (const ck of capabilities.loraseek_checkpoints) {
-      const opt = document.createElement("option");
-      opt.value = ck.filename;
-      opt.textContent = ck.label;
-      if (ck.is_default) opt.selected = true;
-      lsel.appendChild(opt);
-    }
+  const initialSf = Number($("sf").value) || 7;
+  updateNeloraCheckpointsForSf(initialSf);
+  updateGloriphyCheckpointsForSf(initialSf);
+  updateLoraseekCheckpointsForSf(initialSf);
+  syncSfCompatibility(initialSf);
+}
+
+function updateNeloraCheckpointsForSf(sf) {
+  const nsel = $("nelora_checkpoint");
+  const neloraOpt = $("nelora-option");
+  if (!nsel || !capabilities) return;
+
+  nsel.innerHTML = "";
+  const matching = (capabilities.nelora_checkpoints || []).filter((ck) => ck.sf === sf);
+  for (const ck of matching) {
+    const opt = document.createElement("option");
+    opt.value = ck.id;
+    opt.textContent = ck.label;
+    if (ck.is_default) opt.selected = true;
+    nsel.appendChild(opt);
   }
 
-  const initialSf = Number($("sf").value) || 7;
-  updateGloriphyCheckpointsForSf(initialSf);
-  syncSfCompatibility(initialSf);
+  if (neloraOpt) {
+    if (!capabilities.nelora_available) {
+      neloraOpt.disabled = true;
+      neloraOpt.textContent = "NeLoRa (neural) — checkpoints unavailable";
+    } else if (matching.length === 0) {
+      neloraOpt.disabled = true;
+      neloraOpt.textContent = `NeLoRa (neural) — SF${sf} checkpoint not ready`;
+    } else {
+      neloraOpt.disabled = false;
+      neloraOpt.textContent = "NeLoRa (neural)";
+    }
+  }
+}
+
+function updateLoraseekCheckpointsForSf(sf) {
+  const lsel = $("loraseek_checkpoint");
+  const loraseekOpt = $("loraseek-option");
+  if (!lsel || !capabilities) return;
+
+  lsel.innerHTML = "";
+  const matching = (capabilities.loraseek_checkpoints || []).filter((ck) => ck.sf === sf);
+  for (const ck of matching) {
+    const opt = document.createElement("option");
+    opt.value = ck.filename;
+    opt.textContent = ck.label;
+    if (ck.is_default) opt.selected = true;
+    lsel.appendChild(opt);
+  }
+
+  if (loraseekOpt) {
+    if (!capabilities.loraseek_available) {
+      loraseekOpt.disabled = true;
+      loraseekOpt.textContent = "LoRaSeek (neural) — checkpoints unavailable";
+    } else if (matching.length === 0) {
+      loraseekOpt.disabled = true;
+      loraseekOpt.textContent = `LoRaSeek (neural) — SF${sf} checkpoint not ready`;
+    } else {
+      loraseekOpt.disabled = false;
+      loraseekOpt.textContent = "LoRaSeek (neural)";
+    }
+  }
 }
 
 function updateGloriphyCheckpointsForSf(sf) {
@@ -160,8 +210,8 @@ function syncSfCompatibility(sf) {
 
   const loraseekOpt = $("loraseek-option");
   if (loraseekOpt && capabilities?.loraseek_available) {
-    loraseekOpt.disabled = (sf !== 7);
-    if (sf !== 7 && $("symbol_decoding_method").value === "loraseek") {
+    loraseekOpt.disabled = (sf !== 7 && sf !== 8);
+    if (sf !== 7 && sf !== 8 && $("symbol_decoding_method").value === "loraseek") {
       $("symbol_decoding_method").value = "conventional";
       $("loraseek-checkpoint-row").hidden = true;
     }
@@ -169,9 +219,10 @@ function syncSfCompatibility(sf) {
 
   const neloraOpt = $("nelora-option");
   if (neloraOpt && capabilities?.nelora_available) {
-    neloraOpt.disabled = (sf !== 7);
-    if (sf !== 7 && $("symbol_decoding_method").value === "nelora") {
+    neloraOpt.disabled = (sf !== 7 && sf !== 8);
+    if (sf !== 7 && sf !== 8 && $("symbol_decoding_method").value === "nelora") {
       $("symbol_decoding_method").value = "conventional";
+      $("nelora-checkpoint-row").hidden = true;
     }
   }
 
@@ -191,6 +242,7 @@ $("preamble_detection_method").addEventListener("change", (e) => {
 });
 
 $("symbol_decoding_method").addEventListener("change", (e) => {
+  $("nelora-checkpoint-row").hidden = e.target.value !== "nelora";
   $("loraseek-checkpoint-row").hidden = e.target.value !== "loraseek";
   $("gloriphy-checkpoint-row").hidden = e.target.value !== "gloriphy";
 });
@@ -226,6 +278,7 @@ function collectConfig() {
       preamble_detection_method: method,
       calora_checkpoint: method === "calora" ? $("calora_checkpoint").value : null,
       symbol_decoding_method: $("symbol_decoding_method").value,
+      nelora_checkpoint: $("symbol_decoding_method").value === "nelora" ? $("nelora_checkpoint")?.value : null,
       loraseek_checkpoint: $("symbol_decoding_method").value === "loraseek" ? $("loraseek_checkpoint").value : null,
       gloriphy_checkpoint: $("symbol_decoding_method").value === "gloriphy" ? $("gloriphy_checkpoint").value : null,
       toggles: {
@@ -245,7 +298,9 @@ function collectConfig() {
 function fillFormFromConfig(clientConfig, serverConfig) {
   if (clientConfig.sf) {
     $("sf").value = clientConfig.sf;
+    updateNeloraCheckpointsForSf(clientConfig.sf);
     updateGloriphyCheckpointsForSf(clientConfig.sf);
+    updateLoraseekCheckpointsForSf(clientConfig.sf);
     syncSfCompatibility(clientConfig.sf);
   }
   $("bw").value = clientConfig.bw;
@@ -263,8 +318,10 @@ function fillFormFromConfig(clientConfig, serverConfig) {
   $("calora-checkpoint-row").hidden = serverConfig.preamble_detection_method !== "calora";
   if (serverConfig.calora_checkpoint) $("calora_checkpoint").value = serverConfig.calora_checkpoint;
   $("symbol_decoding_method").value = serverConfig.symbol_decoding_method;
+  $("nelora-checkpoint-row").hidden = serverConfig.symbol_decoding_method !== "nelora";
   $("loraseek-checkpoint-row").hidden = serverConfig.symbol_decoding_method !== "loraseek";
   $("gloriphy-checkpoint-row").hidden = serverConfig.symbol_decoding_method !== "gloriphy";
+  if (serverConfig.nelora_checkpoint && $("nelora_checkpoint")) $("nelora_checkpoint").value = serverConfig.nelora_checkpoint;
   if (serverConfig.loraseek_checkpoint) $("loraseek_checkpoint").value = serverConfig.loraseek_checkpoint;
   if (serverConfig.gloriphy_checkpoint) $("gloriphy_checkpoint").value = serverConfig.gloriphy_checkpoint;
 
@@ -392,7 +449,8 @@ function configSummary(clientConfig, serverConfig) {
     : "Conventional";
   let demod = "conv demod";
   if (serverConfig.symbol_decoding_method === "nelora") {
-    demod = "NeLoRa";
+    const ckpt = serverConfig.nelora_checkpoint ? ` (${serverConfig.nelora_checkpoint})` : "";
+    demod = `NeLoRa${ckpt}`;
   } else if (serverConfig.symbol_decoding_method === "loraseek") {
     const ckpt = (serverConfig.loraseek_checkpoint || "90000").replace(".pkl", "").replace("_LoRaSeek", "");
     demod = `LoRaSeek (${ckpt})`;

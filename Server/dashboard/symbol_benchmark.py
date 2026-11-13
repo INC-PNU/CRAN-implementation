@@ -31,7 +31,12 @@ from utils.my_lora_utils import (
 from utils.helper_function import detect_cfo_sto
 from utils.nelora_chunking import iq_to_symbol_chunks
 from utils.nelora_utils import inverse_symb
-from utils.nelora_inference import _load_models as load_nelora_models, NELORA_VALIDATED
+from utils.nelora_inference import (
+    _load_models as load_nelora_models,
+    NELORA_VALIDATED,
+    NELORA_SF7_AVAILABLE,
+    NELORA_SF8_AVAILABLE,
+)
 from utils import loraseek_inference, gloriphy_inference
 from models.calora.calora_model.model_calora import CALoRa
 
@@ -281,10 +286,12 @@ def evaluate_single_frame(
         }
 
     # ── Model 2: NeLoRa ────────────────────────────────────────────────────
-    if sf == 7:
+    nelora_ready = (sf == 7 and NELORA_SF7_AVAILABLE) or (sf == 8 and NELORA_SF8_AVAILABLE)
+    if nelora_ready:
         try:
             t0 = time.perf_counter()
-            mask_net, nelora_clf = load_nelora_models("100000")
+            ckpt = "100000" if sf == 7 else "75000"
+            mask_net, nelora_clf = load_nelora_models(ckpt, sf=sf)
             chunks = iq_to_symbol_chunks(
                 payload_corrected, sf, bw, fs, num_symbols=n_symbols, dechirp=False
             )
@@ -304,7 +311,7 @@ def evaluate_single_frame(
                 "total": n_symbols,
                 "accuracy_pct": round((matched / n_symbols) * 100.0, 2),
                 "execution_time_ms": round(t_nelora, 2),
-                "notes": "maskCNN denoiser + hybrid classifier",
+                "notes": f"maskCNN denoiser + hybrid classifier ({'SF7 100k' if sf == 7 else 'SF8 75k'})",
             }
         except Exception as exc:
             models_output["nelora"] = {
@@ -316,7 +323,7 @@ def evaluate_single_frame(
         models_output["nelora"] = {
             "name": "NeLoRa",
             "available": False,
-            "status": f"NeLoRa checkpoints currently configured for SF7",
+            "status": f"NeLoRa checkpoints for SF{sf} not available",
         }
 
     # ── Model 3: CALoRa ────────────────────────────────────────────────────
@@ -360,14 +367,20 @@ def evaluate_single_frame(
         }
 
     # ── Model 4: LoRaSeek ──────────────────────────────────────────────────
-    if sf == 7 and loraseek_inference.LORASEEK_AVAILABLE:
+    ls_available = (
+        (sf == 7 and loraseek_inference.LORASEEK_SF7_AVAILABLE)
+        or (sf == 8 and loraseek_inference.LORASEEK_SF8_AVAILABLE)
+    )
+    if ls_available:
         try:
             t0 = time.perf_counter()
+            ckpt_name = "75000_LoRaSeek.pkl" if sf == 7 else "90000_LoRaSeek.pkl"
             ls_syms = loraseek_inference.demodulate_payload_loraseek(
-                payload_corrected, sf, bw, fs, checkpoint_name="75000_LoRaSeek.pkl"
+                payload_corrected, sf, bw, fs, checkpoint_name=ckpt_name
             )
             t_ls = (time.perf_counter() - t0) * 1000
             matched = int(np.sum(np.array(ls_syms) == np.array(gt_symbols)))
+            version_note = "v9 75k" if sf == 7 else "v81 90k"
             models_output["loraseek"] = {
                 "name": "LoRaSeek",
                 "available": True,
@@ -377,7 +390,7 @@ def evaluate_single_frame(
                 "total": n_symbols,
                 "accuracy_pct": round((matched / n_symbols) * 100.0, 2),
                 "execution_time_ms": round(t_ls, 2),
-                "notes": "LoRaSeekNet denoiser + ISTFT + FFT",
+                "notes": f"LoRaSeekNet denoiser ({version_note}) + ISTFT + FFT",
             }
         except Exception as exc:
             models_output["loraseek"] = {

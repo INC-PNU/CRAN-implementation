@@ -86,6 +86,9 @@
             <option value="gloriphy" id="gloriphy-option">GLoRiPHY (neural)</option>
           </select>
         </label>
+        <label id="nelora-checkpoint-row" hidden>NeLoRa checkpoint
+          <select id="nelora_checkpoint"></select>
+        </label>
         <label id="loraseek-checkpoint-row" hidden>LoRaSeek checkpoint
           <select id="loraseek_checkpoint">
             <option value="90000_LoRaSeek.pkl" selected>90000_LoRaSeek.pkl (default)</option>
@@ -214,7 +217,7 @@
           <label>Spreading Factor
             <select id="single-sf">
               <option value="7" selected>SF7 (Conventional, NeLoRa, CALoRa, LoRaSeek)</option>
-              <option value="8">SF8 (Conventional, GLoRiPhy)</option>
+              <option value="8">SF8 (Conventional, GLoRiPhy, LoRaSeek, NeLoRa)</option>
             </select>
           </label>
           <div class="param-badge-row">

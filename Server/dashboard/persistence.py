@@ -94,7 +94,11 @@ def make_label(client_config: dict, server_config: dict) -> str:
 
     demod = server_config.get("symbol_decoding_method", "conventional")
     if demod == "nelora":
-        demod_label = "NeLoRa demod"
+        ckpt = server_config.get("nelora_checkpoint")
+        if ckpt:
+            demod_label = f"NeLoRa ({ckpt}) demod"
+        else:
+            demod_label = "NeLoRa demod"
     elif demod == "loraseek":
         ckpt = server_config.get("loraseek_checkpoint") or "90000"
         ckpt_short = ckpt.replace(".pkl", "").replace("_LoRaSeek", "")

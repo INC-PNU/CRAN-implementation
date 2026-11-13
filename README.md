@@ -39,18 +39,35 @@ collections :
 - processed_iq_signals
 - raw_iq_signals
 
-## Summary run all process
+## Quick Start (Root Runners)
 
-- Server
+You can launch components directly from the repository root without changing directories:
+
+```bash
+# 1. Start the Analytics & Demodulation Benchmark Dashboard (UI)
+python run_dashboard.py
+
+# 2. Start the LoRa C-RAN Server (default: main3.py)
+python run_server.py          # or: python run_server.py --ver 1|2|3
+
+# 3. Transmit signals from Client (default: client3.py)
+python run_client.py          # or: python run_client.py --ver 1|2|3
+```
+
+---
+
+## Summary run all process (Direct)
+
+- Server:
 
 ```bash
 cd Server
-python main.py
+python main3.py   # or main.py / main2.py
 ```
 
 Note : Run once, works like Server as Common
 
-in the new terminal
+in the new terminal:
 
 ```bash
 cd Server
@@ -59,11 +76,11 @@ python combiner_worker.py
 
 Note : Run once, works like watcher
 
-- Client
+- Client:
 
 ```bash
 cd Client
-python Client.py
+python client3.py  # or client.py / client2.py
 ```
 
 Run everytime want to send signal, works like client
@@ -158,18 +175,26 @@ This endpoint performs the following operations:
      - result_combined
      - result_proc
 
-### Testing and Validation
+### Testing and Validation (Jupyter Notebooks)
 
-1. To validate and visualize the processing and combining results:
-   - Run the notebook:
+All analysis and benchmark notebooks are organized in [`Server/notebooks/`](file:///c:/Users/priba/Sean-2025/INC-LAB/CRAN-implementation/Server/notebooks):
+- `plot_results.ipynb`: Detection rate comparison across SNR for CALoRa vs Conventional.
+- `plot_results2.ipynb`: PRR / BER curves across CFO and STO impairments.
+- `plot_results3.ipynb`: Multi-slot benchmark for offset demodulation.
+- `testing.ipynb`: Interactive scratchpad for chirp generation and demodulation tests.
+- `test_loraseek_random_symbols.ipynb`: Standalone test suite for LoRaSeek models.
 
 ```bash
-testing.ipynb
+jupyter notebook Server/notebooks/
 ```
 
-2. The notebook loads raw, processed, and combined IQ signals and displays the results for analysis.
+## How to run Dashboard (Web UI)
 
-## How to run Dashboard_app.py
+```bash
+python run_dashboard.py
+```
+Open your browser at `http://localhost:5000/`.
+- **Page 1 (Full Pipeline Sweep)**: Monte-Carlo sweep of detection, sync, and demodulation across SNR.
+- **Page 2 (Single-Frame Symbol Benchmark)**: Interactive side-by-side benchmark of 7 demodulation methods on single LoRa frames.
 
-1. you need to add Chirp_restorer_sf7.pth
-2. also you need to add preamble_best_finetuned_cfo_mix.pth
+See [`Server/models/README.md`](file:///c:/Users/priba/Sean-2025/INC-LAB/CRAN-implementation/Server/models/README.md) for details on deep learning model architectures and checkpoints.

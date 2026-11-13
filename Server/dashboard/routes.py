@@ -20,6 +20,7 @@ def index():
 def capabilities():
     return jsonify({
         "nelora_available": nelora_inference.NELORA_VALIDATED,
+        "nelora_checkpoints": nelora_inference.list_nelora_checkpoints(),
         "loraseek_available": loraseek_inference.LORASEEK_AVAILABLE,
         "loraseek_checkpoints": loraseek_inference.list_loraseek_checkpoints(),
         "gloriphy_available": gloriphy_inference.GLORIPHY_AVAILABLE,
