@@ -869,7 +869,7 @@ function renderSingleFrameResults(res) {
       nelora:       { num: 2, title: "Reference [2]: NELoRa — Li et al., ACM SenSys '21" },
       loraseek:     { num: 3, title: "Reference [3]: LoRaSeek — ACM MobiCom '25" },
       gloriphy:     { num: 4, title: "Reference [4]: GLoRiPHY — ACM SenSys '24" },
-      calora:       { num: 5, title: "Reference [5]: CALoRa — IEEE" },
+      calora:       { num: 5, title: "Reference [5]: CALoRa (Chirp-Aware Self-Attention) — IEEE" },
     };
     const refInfo = REF_MAP[key];
     const refMark = refInfo

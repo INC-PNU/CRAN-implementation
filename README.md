@@ -53,7 +53,7 @@ This repository implements centralized multi-gateway diversity combining, carrie
    - **Dechirping FFT with Downsampling (Polyphase)**: High-fidelity Nyquist anti-aliased downsampling (`scipy.signal.resample_poly`) + standard FFT.
    - **Estimate Symbol without Downsampling (Dual-Energy Sum)**: Full sampling rate ($F_s = 1\text{ MHz}$) dual-peak energy combining across folded spectrum bins ([Xu et al., ACM TOSN 2024](https://dl.acm.org/doi/10.1145/3546869)).
    - **NeLoRa**: STFT spectrogram denoiser (`maskCNNModel`) + hybrid neural classifier (`classificationHybridModel`), supporting both **SF7** and **SF8** ([Li et al., ACM SenSys 2021](https://dl.acm.org/doi/10.1145/3485730.3485928)).
-   - **CALoRa**: Preamble detector and CNN chirp restorer with post-denoised conventional or hybrid classification (**SF7**, [IEEE](https://ieeexplore.ieee.org/document/11386915)).
+   - **CALoRa**: Preamble detector and CNN chirp restorer with post-denoised conventional or hybrid classification (**SF7**, [Chirp-Aware Self-Attention, IEEE][ref-5]).
    - **LoRaSeek**: STFT Transformer + Dual-Attention U-Net with Nyquist ISTFT reconstruction, supporting both **SF7** and **SF8** ([ACM MobiCom 2025](https://dl.acm.org/doi/10.1145/3680207.3765241)).
    - **GLoRiPHY**: Conformer-based channel-aware generative denoiser with STFT/ISTFT reconstruction, supporting **SF8** and **SF9** ([ACM SenSys 2024](https://dl.acm.org/doi/10.1145/3666025.3699354)).
 
@@ -240,5 +240,5 @@ To run the full C-RAN multi-gateway combining pipeline:
    **GLoRiPHY**: *Enhancing LoRa Reception with Generative Models: Channel-Aware Denoising of LoRaPHY Signals*. In Proceedings of the 22nd ACM Conference on Embedded Networked Sensor Systems (SenSys '24).  
    DOI: [https://dl.acm.org/doi/10.1145/3666025.3699354](https://dl.acm.org/doi/10.1145/3666025.3699354)
 5. [ref-5]: https://ieeexplore.ieee.org/document/11386915
-   **CALoRa**: *CALoRa: Content-Aware Preamble Detection and Waveform Restoration for LoRa Networks*. IEEE.  
+   **CALoRa**: *Chirp-Aware Self-Attention for Robust LoRa Preamble Detection Under Ultralow SNR*. IEEE.  
    Link: [https://ieeexplore.ieee.org/document/11386915](https://ieeexplore.ieee.org/document/11386915)
