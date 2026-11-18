@@ -135,7 +135,7 @@ def evaluate_single_frame(
         noise_seed = seed
     else:
         rng = np.random.default_rng()
-        noise_seed = None
+        noise_seed = int(rng.integers(0, 2**31 - 1))
 
     n_classes = 2 ** sf
     fps = int(n_classes * (fs / bw))

@@ -54,6 +54,8 @@ Server/models/
 │   │   ├── encoder.py, attention.py, convolution.py, feed_forward.py
 │   │   └── stft_utils.py       # STFT / ISTFT signal transforms
 │   └── checkpoints/
+│       ├── sf7/
+│       │   └── awgn_filter/            # SF7 AWGN filter model (best_conformer_jgj.pkl)
 │       ├── sf8/
 │       │   ├── awgn_filter/            # AWGN filter model (best_conformer_jgj.pkl)
 │       │   ├── awgn_filter_retrained/  # Retrained AWGN filter
@@ -77,7 +79,7 @@ Server/models/
 | **CALoRa** | Preamble Detection & Chirp Restoration | SF7 (SF8 ready) | `dashboard/calora_bridge.py` | PyTorch `.pth` |
 | **LoRaSeek** | Per-Symbol STFT Denoising $\to$ ISTFT $\to$ Dechirp | SF7, SF8 | `utils/loraseek_inference.py` | Pickled `.pkl` |
 | **NeLoRa** | Per-Symbol Spectrogram Denoise + Direct Classifier | SF7, SF8 | `utils/nelora_inference.py` | Pickled `.pkl` |
-| **GLoRiPHY** | Conformer Generative Denoise $\to$ ISTFT $\to$ Dechirp | SF8, SF9 | `utils/gloriphy_inference.py` | Pickled `.pkl` / `.pth` |
+| **GLoRiPHY** | Conformer Generative Denoise $\to$ ISTFT $\to$ Dechirp | SF7, SF8, SF9 | `utils/gloriphy_inference.py` | Pickled `.pkl` / `.pth` |
 
 ---
 

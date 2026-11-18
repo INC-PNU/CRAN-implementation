@@ -745,16 +745,19 @@ function setupSingleFrameControls() {
     const errorEl = $("single-error");
     errorEl.hidden = true;
     btn.disabled = true;
-    btn.textContent = "Evaluating 5 Models...";
+    btn.textContent = "Evaluating Models...";
 
     const nSymbols = Number($("single-n-symbols").value) || 10;
     if (nSymbols < 1 || nSymbols > 1000) {
       errorEl.textContent = "Payload length must be between 1 and 1000 symbols.";
       errorEl.hidden = false;
       btn.disabled = false;
-      btn.textContent = "Evaluate 5 Models";
+      btn.textContent = "Evaluate Models";
       return;
     }
+
+    const rawSeed = $("single-seed").value.trim();
+    const parsedSeed = rawSeed === "" ? -1 : Number(rawSeed);
 
     const payload = {
       sf: Number($("single-sf").value) || 7,
@@ -767,7 +770,7 @@ function setupSingleFrameControls() {
       apply_sto: $("single-apply-sto").checked,
       sto_samples: Number($("single-sto-samp").value) || 0,
       apply_compensation: $("single-apply-compensation")?.checked ?? true,
-      seed: Number($("single-seed").value) ?? -1,
+      seed: Number.isNaN(parsedSeed) ? -1 : parsedSeed,
     };
 
     try {
@@ -778,7 +781,7 @@ function setupSingleFrameControls() {
       errorEl.hidden = false;
     } finally {
       btn.disabled = false;
-      btn.textContent = "Evaluate 5 Models";
+      btn.textContent = "Evaluate Models";
     }
   });
 }

@@ -55,7 +55,7 @@ This repository implements centralized multi-gateway diversity combining, carrie
    - **NeLoRa**: STFT spectrogram denoiser (`maskCNNModel`) + hybrid neural classifier (`classificationHybridModel`), supporting both **SF7** and **SF8** ([Li et al., ACM SenSys 2021](https://dl.acm.org/doi/10.1145/3485730.3485928)).
    - **CALoRa**: Preamble detector and CNN chirp restorer with post-denoised conventional or hybrid classification (**SF7**, [Chirp-Aware Self-Attention, IEEE][ref-5]).
    - **LoRaSeek**: STFT Transformer + Dual-Attention U-Net with Nyquist ISTFT reconstruction, supporting both **SF7** and **SF8** ([ACM MobiCom 2025](https://dl.acm.org/doi/10.1145/3680207.3765241)).
-   - **GLoRiPHY**: Conformer-based channel-aware generative denoiser with STFT/ISTFT reconstruction, supporting **SF8** and **SF9** ([ACM SenSys 2024](https://dl.acm.org/doi/10.1145/3666025.3699354)).
+   - **GLoRiPHY**: Conformer-based channel-aware generative denoiser with STFT/ISTFT reconstruction, supporting **SF7**, **SF8**, and **SF9** ([ACM SenSys 2024](https://dl.acm.org/doi/10.1145/3666025.3699354)).
 
 4. **Interactive Analytics & Benchmark Dashboard**:
    - Built with Flask, vanilla ES6 JavaScript, and Chart.js.
@@ -170,7 +170,7 @@ python run_client.py            # or: python run_client.py --ver 1|2|3
 | **NeLoRa** | Deep Learning | **SF7, SF8** | `75000` / `100000` (`.pkl`) | [Li et al., ACM SenSys 2021][ref-2] |
 | **CALoRa** | Deep Learning | **SF7** (SF8 ready) | `chirp_restorer_sf7.pth` | [CALoRa, IEEE][ref-5] |
 | **LoRaSeek** | Deep Learning | **SF7, SF8** | `75000` / `90000` (`.pkl`) | [LoRaSeek, ACM MobiCom 2025][ref-3] |
-| **GLoRiPHY** | Deep Learning | **SF8, SF9** | `best_conformer_jgj.pkl` | [GLoRiPHY, ACM SenSys 2024][ref-4] |
+| **GLoRiPHY** | Deep Learning | **SF7, SF8, SF9** | `best_conformer_jgj.pkl` | [GLoRiPHY, ACM SenSys 2024][ref-4] |
 
 > For comprehensive model architectures, tensor shapes, and training checkpoints, see [Server/models/README.md](file:///c:/Users/priba/Sean-2025/INC-LAB/CRAN-implementation/Server/models/README.md).
 
