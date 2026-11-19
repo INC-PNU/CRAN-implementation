@@ -59,3 +59,15 @@ export function runSingleFrameBenchmark(params) {
     body: JSON.stringify(params),
   }).then(asJson);
 }
+
+export function getSyncExperimentResults() {
+  return fetch("/api/benchmark/sync-experiment").then(asJson);
+}
+
+export function runSyncExperiment(params) {
+  return fetch("/api/benchmark/sync-experiment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  }).then(asJson);
+}

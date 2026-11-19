@@ -83,32 +83,20 @@ def run_dir(run_id: str) -> Path:
 
 
 def make_label(client_config: dict, server_config: dict) -> str:
-    """Auto-generated summary label, e.g. 'CALoRa (sean) + full correction, SF7
-    125kHz@1MHz, SNR -25..-5'. Overridable by the caller (POST /api/runs's "label")."""
+    """Auto-generated journal-friendly summary label, e.g.:
+    '[Data CFO & TO]; CALoRa Preamble detection + LoRaSeek demod, use CFO+STO correction, SF7 125kHz @1MHz'
+    Overridable by the caller (POST /api/runs's "label")."""
     method = server_config.get("preamble_detection_method", "conventional")
-    if method == "calora":
-        ckpt = server_config.get("calora_checkpoint") or "?"
-        method_label = f"CALoRa ({ckpt.replace('.pth', '')})"
-    else:
-        method_label = "Conventional"
+    method_label = "CALoRa Preamble detection" if method == "calora" else "Conventional Preamble detection"
 
     demod = server_config.get("symbol_decoding_method", "conventional")
-    if demod == "nelora":
-        ckpt = server_config.get("nelora_checkpoint")
-        if ckpt:
-            demod_label = f"NeLoRa ({ckpt}) demod"
-        else:
-            demod_label = "NeLoRa demod"
-    elif demod == "loraseek":
-        ckpt = server_config.get("loraseek_checkpoint") or "90000"
-        ckpt_short = ckpt.replace(".pkl", "").replace("_LoRaSeek", "")
-        demod_label = f"LoRaSeek ({ckpt_short}) demod"
-    elif demod == "gloriphy":
-        ckpt = server_config.get("gloriphy_checkpoint") or "default"
-        ckpt_short = ckpt.split("/")[-1].replace("best_conformer_jgj.pkl", "").strip("_")
-        demod_label = f"GLoRiPHY ({ckpt_short}) demod"
-    else:
-        demod_label = "conv demod"
+    demod_map = {
+        "nelora": "NeLoRa demod",
+        "loraseek": "LoRaSeek demod",
+        "gloriphy": "GLoRiPHY demod",
+        "conventional": "Conventional demod",
+    }
+    demod_label = demod_map.get(demod, f"{demod} demod")
 
     toggles = server_config.get("toggles", {})
     corr_bits = []
@@ -116,28 +104,31 @@ def make_label(client_config: dict, server_config: dict) -> str:
         corr_bits.append("CFO")
     if toggles.get("apply_sto_correction", True):
         corr_bits.append("STO")
-    corr_label = "+".join(corr_bits) + " correction" if corr_bits else "no correction"
+    corr_label = "use " + "+".join(corr_bits) + " correction" if corr_bits else "no correction"
 
     sf = client_config.get("sf", 7)
     bw = client_config.get("bw", 125_000)
     fs = client_config.get("fs", 1_000_000)
-    snr_lo, snr_hi = client_config.get("snr_db_range", [None, None])
+    bw_str = f"{bw // 1000}kHz" if bw % 1000 == 0 else f"{bw / 1000:g}kHz"
+    fs_str = f"{fs // 1_000_000}MHz" if fs >= 1_000_000 and fs % 1_000_000 == 0 else (
+        f"{fs / 1_000_000:g}MHz" if fs >= 1_000_000 else f"{fs // 1000}kHz"
+    )
 
     cfo_range = client_config.get("cfo_hz_range", [0, 0])
     sto_range = client_config.get("sto_samp_range", [0, 0])
     has_cfo = (cfo_range[0] != 0 or cfo_range[1] != 0)
     has_sto = (sto_range[0] != 0 or sto_range[1] != 0)
     if has_cfo and has_sto:
-        data_tag = "Data: Both CFO & STO"
+        data_tag = "Data CFO & TO"
     elif has_cfo:
-        data_tag = "Data: CFO only"
+        data_tag = "Data CFO"
     elif has_sto:
-        data_tag = "Data: STO only"
+        data_tag = "Data TO"
     else:
-        data_tag = "Data: Clean"
+        data_tag = "Data Clean"
 
-    return (f"{method_label} [{data_tag}] + {demod_label}, {corr_label}, "
-            f"SF{sf} {bw//1000}kHz@{fs//1000}kHz, SNR {snr_lo}..{snr_hi}")
+    return (f"[{data_tag}]; {method_label} + {demod_label}, {corr_label}, "
+            f"SF{sf} {bw_str} @{fs_str}")
 
 
 def create_manifest(run_id: str, client_config: dict, server_config: dict, label: str | None) -> dict:

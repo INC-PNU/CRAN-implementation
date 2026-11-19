@@ -6,6 +6,11 @@ from flask import Blueprint, request, jsonify, render_template, send_file
 from dashboard import calora_bridge, persistence
 from dashboard.orchestrator import MANAGER, ConfigError, TooManyRunsError
 from dashboard.symbol_benchmark import evaluate_single_frame
+from dashboard.sync_experiment import (
+    run_sync_experiment,
+    load_saved_results as load_sync_experiment_results,
+    save_results as save_sync_experiment_results,
+)
 from utils import nelora_inference, loraseek_inference, gloriphy_inference
 
 bp = Blueprint("dashboard", __name__)
@@ -61,6 +66,57 @@ def benchmark_single_frame():
         return jsonify(result), 200
     except Exception as exc:
         return jsonify({"error": "benchmark_failed", "detail": str(exc)}), 500
+
+
+@bp.route("/api/benchmark/sync-experiment", methods=["GET"])
+def get_sync_experiment():
+    """Return precomputed denoised-synchronization experiment results (SF7 & SF8)."""
+    return jsonify({"results": load_sync_experiment_results()}), 200
+
+
+@bp.route("/api/benchmark/sync-experiment", methods=["POST"])
+def post_sync_experiment():
+    """Run a live Monte-Carlo denoised-synchronization comparison sweep."""
+    data = request.get_json(force=True) or {}
+    try:
+        sf = int(data.get("sf", 7))
+        snr_min = int(data.get("snr_min", -24 if sf == 7 else -26))
+        snr_max = int(data.get("snr_max", -10 if sf == 7 else -12))
+        snr_step = int(data.get("snr_step", 2))
+        n_trials = int(data.get("n_trials", 40))
+        cfo_lo = float(data.get("cfo_lo", -4358.0))
+        cfo_hi = float(data.get("cfo_hi", 4584.0))
+        sto_lo = int(data.get("sto_lo", 0))
+        sto_hi = int(data.get("sto_hi", 50))
+        seed = int(data.get("seed", 2026))
+        should_save = bool(data.get("save", True))
+
+        if sf not in (7, 8):
+            return jsonify({"error": "invalid_parameters", "detail": f"SF must be 7 or 8 (got {sf})"}), 400
+        if snr_min > snr_max or snr_step <= 0:
+            return jsonify({"error": "invalid_parameters", "detail": "Invalid SNR range or step"}), 400
+        if not (5 <= n_trials <= 500):
+            return jsonify({"error": "invalid_parameters", "detail": "n_trials must be between 5 and 500"}), 400
+        if cfo_lo > cfo_hi or sto_lo > sto_hi:
+            return jsonify({"error": "invalid_parameters", "detail": "Range lo must be <= hi"}), 400
+
+        result = run_sync_experiment(
+            sf=sf,
+            snr_min=snr_min,
+            snr_max=snr_max,
+            snr_step=snr_step,
+            n_trials=n_trials,
+            cfo_lo=cfo_lo,
+            cfo_hi=cfo_hi,
+            sto_lo=sto_lo,
+            sto_hi=sto_hi,
+            seed=seed,
+        )
+        if should_save:
+            save_sync_experiment_results(sf, result)
+        return jsonify(result), 200
+    except Exception as exc:
+        return jsonify({"error": "sync_experiment_failed", "detail": str(exc)}), 500
 
 
 @bp.route("/api/runs", methods=["POST"])

@@ -3,10 +3,22 @@ import {
   createCharts,
   updateCharts,
   assignColor,
+  assignMarker,
+  getRunStyle,
+  resolveSelectedStyles,
+  setRunColor,
+  setRunMarker,
+  resetAllRunStyles,
+  pruneRunStyles,
   computeSeries,
   MAX_OVERLAY_RUNS,
+  exportSweepChartPng,
   createSingleFrameCharts,
   updateSingleFrameCharts,
+  exportSingleFrameChartPng,
+  createSyncExperimentCharts,
+  updateSyncExperimentCharts,
+  exportSyncChartPng,
 } from "./charts.js";
 
 const charts = createCharts();
@@ -473,12 +485,12 @@ function configSummary(clientConfig, serverConfig) {
 async function refreshHistory() {
   const { runs } = await api.listRuns();
   latestRunsList = runs;
+  pruneRunStyles(runs.map((r) => r.run_id));
 
   // Auto-resume: if a run is live and we don't already know about it, adopt it.
   const runningRun = runs.find((r) => r.status === "running" || r.status === "queued");
   if (runningRun && !liveRunId) {
     liveRunId = runningRun.run_id;
-    assignColor(liveRunId);
     selectedHistoryIds.add(liveRunId);
     setFormEnabled(false);
     $("progress-meter").hidden = false;
@@ -489,17 +501,40 @@ async function refreshHistory() {
   renderChartsNow();
 }
 
+function getActiveResolvedStyles() {
+  const selectedItems = [...selectedHistoryIds].map((id) => ({
+    runId: id,
+    meta: latestRunsList.find((r) => r.run_id === id) || null,
+  }));
+  return resolveSelectedStyles(selectedItems);
+}
+
 function renderHistoryTable(runs) {
   const tbody = $("history-body");
   tbody.innerHTML = "";
+  const activeStyles = getActiveResolvedStyles();
+
   for (const r of runs) {
     const tr = document.createElement("tr");
     const checked = selectedHistoryIds.has(r.run_id);
     const isLive = r.run_id === liveRunId;
+    const style = activeStyles.get(r.run_id) || getRunStyle(r.run_id, r);
 
     tr.innerHTML = `
       <td><input type="checkbox" class="row-select" ${checked ? "checked" : ""}
                  ${!checked && selectedHistoryIds.size >= MAX_OVERLAY_RUNS ? "disabled" : ""}></td>
+      <td class="style-cell">
+        <div class="style-controls">
+          <input type="color" class="run-color-input" list="journal-color-presets"
+                 value="${style.color}" title="Click to change line color">
+          <select class="run-marker-select" title="Line marker shape">
+            <option value="circle" ${style.marker === "circle" ? "selected" : ""}>●</option>
+            <option value="rect" ${style.marker === "rect" ? "selected" : ""}>■</option>
+            <option value="triangle" ${style.marker === "triangle" ? "selected" : ""}>▲</option>
+            <option value="rectRot" ${style.marker === "rectRot" ? "selected" : ""}>◆</option>
+          </select>
+        </div>
+      </td>
       <td class="label-cell"><input type="text" value="${r.label.replace(/"/g, "&quot;")}"></td>
       <td>${r.created_at ? new Date(r.created_at).toLocaleString() : "—"}</td>
       <td>${configSummary(r.client_config, r.server_config)}</td>
@@ -513,17 +548,31 @@ function renderHistoryTable(runs) {
       if (e.target.checked) {
         if (selectedHistoryIds.size >= MAX_OVERLAY_RUNS) { e.target.checked = false; return; }
         selectedHistoryIds.add(r.run_id);
-        assignColor(r.run_id);
         ensureBinsLoaded(r.run_id).then(renderChartsNow);
       } else {
         selectedHistoryIds.delete(r.run_id);
         renderChartsNow();
       }
-      renderHistoryTable(latestRunsList); // refresh disabled-state of other checkboxes
+      renderHistoryTable(latestRunsList); // refresh disabled-state & active style badges
+    });
+
+    const colorInput = tr.querySelector(".run-color-input");
+    const onColorChange = (e) => {
+      setRunColor(r.run_id, e.target.value);
+      renderChartsNow();
+    };
+    colorInput.addEventListener("input", onColorChange);
+    colorInput.addEventListener("change", onColorChange);
+
+    tr.querySelector(".run-marker-select").addEventListener("change", (e) => {
+      setRunMarker(r.run_id, e.target.value);
+      renderChartsNow();
     });
 
     tr.querySelector(".label-cell input").addEventListener("change", (e) => {
+      r.label = e.target.value;
       api.renameRun(r.run_id, e.target.value).catch(() => {});
+      renderChartsNow();
     });
 
     tr.querySelector(".duplicate-btn").addEventListener("click", () => {
@@ -548,30 +597,83 @@ async function ensureBinsLoaded(runId) {
   binsCache.set(runId, detail ? detail.bins : []);
 }
 
+// Build a clean journal-ready legend label for Preamble & Demod Sweep runs, e.g.:
+//   "[Data CFO & TO]; CALoRa Preamble detection + LoRaSeek demod, use CFO+STO correction, SF7 125kHz @1MHz"
+// Preserves user-edited custom labels while simplifying all auto-generated legacy/new labels.
+function formatSweepLegendLabel(meta, fallbackId) {
+  if (!meta) return fallbackId.slice(0, 8);
+  const rawLabel = (meta.label || "").trim();
+  const isLegacyAuto =
+    rawLabel === "" ||
+    rawLabel.includes("[Data:") ||
+    rawLabel.includes("125kHz@1000kHz") ||
+    rawLabel.includes("conv demod") ||
+    (rawLabel.includes("demod,") && rawLabel.includes("SNR "));
+
+  if (!isLegacyAuto) {
+    return rawLabel;
+  }
+
+  const cli = meta.client_config || {};
+  const srv = meta.server_config || {};
+
+  const cfo = cli.cfo_hz_range || [0, 0];
+  const sto = cli.sto_samp_range || [0, 0];
+  const hasCfo = (cfo[0] !== 0 || cfo[1] !== 0);
+  const hasSto = (sto[0] !== 0 || sto[1] !== 0);
+  let dataTag = "Data Clean";
+  if (hasCfo && hasSto) dataTag = "Data CFO & TO";
+  else if (hasCfo) dataTag = "Data CFO";
+  else if (hasSto) dataTag = "Data TO";
+
+  const preMethod = srv.preamble_detection_method === "calora"
+    ? "CALoRa Preamble detection"
+    : "Conventional Preamble detection";
+
+  const demodMap = {
+    nelora: "NeLoRa demod",
+    loraseek: "LoRaSeek demod",
+    gloriphy: "GLoRiPHY demod",
+    conventional: "Conventional demod",
+  };
+  const demodLabel = demodMap[srv.symbol_decoding_method] || `${srv.symbol_decoding_method || "Conventional"} demod`;
+
+  const t = srv.toggles || {};
+  const corrBits = [];
+  if (t.apply_cfo_correction !== false) corrBits.push("CFO");
+  if (t.apply_sto_correction !== false) corrBits.push("STO");
+  const corrLabel = corrBits.length ? `use ${corrBits.join("+")} correction` : "no correction";
+
+  const sf = cli.sf ?? 7;
+  const bw = cli.bw ?? 125000;
+  const fs = cli.fs ?? 1000000;
+  const bwStr = `${bw / 1000}kHz`;
+  const fsStr = fs >= 1000000 ? `${fs / 1000000}MHz` : `${fs / 1000}kHz`;
+
+  return `[${dataTag}]; ${preMethod} + ${demodLabel}, ${corrLabel}, SF${sf} ${bwStr} @${fsStr}`;
+}
+
 // ── Chart + diagnostics + warning-banner rendering ──────────────────────────────────
 function currentRunsToShow() {
   const runs = [];
+  const activeStyles = getActiveResolvedStyles();
   for (const id of selectedHistoryIds) {
     const meta = latestRunsList.find((r) => r.run_id === id);
     const bins = binsCache.get(id) || [];
     const isLive = id === liveRunId;
-    let label = meta ? meta.label : id.slice(0, 8);
-    if (meta && meta.client_config) {
-      const dataTag = datasetImpairmentInfo(meta.client_config);
-      if (dataTag && !label.includes("Data:") && !label.includes("CFO & STO")) {
-        const plusIdx = label.indexOf("+");
-        if (plusIdx !== -1) {
-          label = `${label.slice(0, plusIdx).trim()} [${dataTag}] ${label.slice(plusIdx)}`;
-        } else {
-          label = `${label} [${dataTag}]`;
-        }
-      }
-    }
+    let label = formatSweepLegendLabel(meta, id);
     if (isLive) {
-      const total = bins.reduce((a, b) => a + b.n_total, 0);
-      label += ` (running)`;
+      label += " (running)";
     }
-    runs.push({ runId: id, label, color: assignColor(id), bins, dashed: isLive });
+    const style = activeStyles.get(id) || getRunStyle(id, meta);
+    runs.push({
+      runId: id,
+      label,
+      color: style.color,
+      marker: style.marker,
+      bins,
+      dashed: isLive,
+    });
   }
   return runs;
 }
@@ -702,17 +804,48 @@ function renderWarningBanner(runs) {
     .join(" ");
 }
 
-document.querySelectorAll(".scope-btn").forEach((btn) => {
+document.querySelectorAll(".scope-btn[data-scope]").forEach((btn) => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".scope-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".scope-btn[data-scope]").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     scope = btn.dataset.scope;
     renderChartsNow();
   });
 });
 
+function setupSweepExportControls() {
+  $("reset-run-colors-btn")?.addEventListener("click", () => {
+    resetAllRunStyles();
+    renderHistoryTable(latestRunsList);
+    renderChartsNow();
+  });
+
+  document.querySelectorAll(".sweep-export-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.chart;
+      if (key) exportSweepChartPng(charts, key);
+    });
+  });
+
+  document.querySelectorAll(".sweep-layout-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".sweep-layout-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const grid = $("sweep-chart-grid");
+      if (grid) {
+        grid.classList.toggle("single-col", btn.dataset.layout === "1col");
+        // Resize charts smoothly after grid reflow
+        requestAnimationFrame(() => {
+          Object.values(charts).forEach((c) => c?.resize());
+        });
+      }
+    });
+  });
+}
+
 // ── Second Page: Navigation & Single-Frame Symbol Benchmark ──────────────────────────
 let singleFrameCharts = null;
+let lastSingleFrameRes = null;
 
 function setupNavigation() {
   const tabs = document.querySelectorAll(".nav-tab");
@@ -724,8 +857,25 @@ function setupNavigation() {
       document.querySelectorAll(".page-container").forEach((page) => {
         page.hidden = (page.id !== targetId);
       });
-      if (targetId === "page-single-frame" && !singleFrameCharts) {
-        singleFrameCharts = createSingleFrameCharts();
+      if (targetId === "page-sweep") {
+        requestAnimationFrame(() => {
+          Object.values(charts).forEach((c) => c?.resize());
+        });
+      }
+      if (targetId === "page-single-frame" && singleFrameCharts) {
+        requestAnimationFrame(() => {
+          singleFrameCharts.acc?.resize();
+          singleFrameCharts.latency?.resize();
+        });
+      }
+      if (targetId === "page-sync-exp") {
+        if (!syncExpCharts) {
+          syncExpCharts = createSyncExperimentCharts();
+        }
+        ensureSyncExperimentLoaded();
+        requestAnimationFrame(() => {
+          Object.values(syncExpCharts || {}).forEach((c) => c?.resize());
+        });
       }
     });
   });
@@ -737,6 +887,15 @@ function setupSingleFrameControls() {
   });
   $("single-apply-sto")?.addEventListener("change", (e) => {
     $("single-sto-row").hidden = !e.target.checked;
+  });
+
+  document.querySelectorAll(".single-export-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.chart;
+      if (singleFrameCharts && key) {
+        exportSingleFrameChartPng(singleFrameCharts, key, lastSingleFrameRes);
+      }
+    });
   });
 
   $("single-frame-form")?.addEventListener("submit", async (e) => {
@@ -890,11 +1049,19 @@ function renderSingleFrameResults(res) {
     tbody.appendChild(tr);
   }
 
-  // Update Charts
-  if (!singleFrameCharts) {
-    singleFrameCharts = createSingleFrameCharts();
-  }
-  updateSingleFrameCharts(singleFrameCharts, res.models);
+  // Update Charts (create lazily AFTER #single-results-container is visible so
+  // canvases measure real non-zero layout dimensions, then resize + draw)
+  lastSingleFrameRes = res;
+  requestAnimationFrame(() => {
+    if (!singleFrameCharts) {
+      singleFrameCharts = createSingleFrameCharts();
+    }
+    if (singleFrameCharts) {
+      singleFrameCharts.acc?.resize();
+      singleFrameCharts.latency?.resize();
+      updateSingleFrameCharts(singleFrameCharts, res.models, res);
+    }
+  });
 
   // Render Symbol-by-Symbol Breakdown Table
   const gt = res.ground_truth_symbols || [];
@@ -961,11 +1128,274 @@ function renderSingleFrameResults(res) {
   sbody.innerHTML = rows.join("");
 }
 
+// ── Third Page: Denoised Up/Down-Chirp Synchronization Experiment ──────────────────────
+let syncExpCharts = null;
+let syncSavedResults = {};
+let syncCurrentData = null;
+let syncLoadedOnce = false;
+
+async function ensureSyncExperimentLoaded() {
+  if (syncLoadedOnce && syncCurrentData) {
+    renderSyncExperiment(syncCurrentData);
+    return;
+  }
+  try {
+    const resp = await api.getSyncExperimentResults();
+    syncSavedResults = resp.results || {};
+    syncLoadedOnce = true;
+    const initial = syncSavedResults.sf7 || syncSavedResults.sf8 || null;
+    if (initial) {
+      selectSavedSyncSf(initial.sf);
+    } else if ($("sync-saved-meta")) {
+      $("sync-saved-meta").textContent = "No saved results yet — click 'Run Live Sync Experiment' below.";
+    }
+  } catch (err) {
+    console.error("Failed to load sync experiment results:", err);
+  }
+}
+
+function selectSavedSyncSf(sf) {
+  const key = `sf${sf}`;
+  document.querySelectorAll(".sync-preset-btn").forEach((b) => {
+    b.classList.toggle("active", Number(b.dataset.sf) === Number(sf));
+  });
+  const data = syncSavedResults[key];
+  if (data) {
+    syncCurrentData = data;
+    renderSyncExperiment(data);
+    if ($("sync-saved-meta")) {
+      $("sync-saved-meta").textContent = `Showing saved SF${data.sf} sweep (${data.n_trials} trials/SNR, runtime ${data.elapsed_sec}s).`;
+    }
+  } else if ($("sync-saved-meta")) {
+    $("sync-saved-meta").textContent = `No saved SF${sf} sweep found yet — use the form below to run one.`;
+  }
+}
+
+function renderSyncExperiment(data) {
+  if (!data) return;
+  if (!syncExpCharts) {
+    syncExpCharts = createSyncExperimentCharts();
+  }
+
+  // Summary chips
+  $("sync-chip-sf").textContent = `SF${data.sf}`;
+  $("sync-chip-trials").textContent = `N=${data.n_trials} trials/SNR`;
+  $("sync-chip-cfo").textContent = `CFO: [${data.cfo_range_hz[0]}, ${data.cfo_range_hz[1]}] Hz`;
+  $("sync-chip-sto").textContent = `STO: [${data.sto_range_samp[0]}, ${data.sto_range_samp[1]}] samp`;
+  $("sync-chip-tol").textContent = `Tol: ±${data.cfo_tol_hz} Hz / ±${data.sto_tol_samp} samp`;
+
+  // KPI Highlight cards (derived directly from data.series so they always populate
+  // regardless of backend highlights schema)
+  const snrs = data.snr_list || [];
+  const series = data.series || {};
+  const hl = data.highlights || {};
+  const targetSnr = hl.ref_snr_db !== undefined ? hl.ref_snr_db : (Number(data.sf) === 7 ? -18 : -20);
+  let refIdx = snrs.indexOf(targetSnr);
+  if (refIdx < 0) refIdx = Math.floor(snrs.length / 2);
+  const refSnr = snrs[refIdx];
+  const snrTag = refSnr !== undefined ? `@ ${refSnr} dB` : "";
+
+  const getVal = (mKey, metricKey) => {
+    const v = series[mKey]?.[metricKey]?.[refIdx];
+    return typeof v === "number" && !Number.isNaN(v) ? v : null;
+  };
+  const fmtPct = (v) => (v === null ? "—" : `${v.toFixed(1)}%`);
+  const fmtGain = (v, base) => {
+    if (v === null || base === null) return "";
+    const g = v - base;
+    const sign = g >= 0 ? "+" : "";
+    return `<span class="sync-gain-badge">${sign}${g.toFixed(1)}%</span>`;
+  };
+  const fmtSignedDiff = (v, base) => {
+    if (v === null || base === null) return "—";
+    const g = v - base;
+    return `${g >= 0 ? "+" : ""}${g.toFixed(1)}%`;
+  };
+
+  const convCfo = getVal("conv_single", "cfo_acc");
+  const convSto = getVal("conv_single", "sto_acc");
+  const convPay = getVal("conv_single", "payload_acc");
+
+  const glCfo = getVal("gloriphy_single", "cfo_acc");
+  const glSto = getVal("gloriphy_single", "sto_acc");
+  const glPay = getVal("gloriphy_single", "payload_acc");
+
+  const lsCfo = getVal("loraseek_single", "cfo_acc");
+  const lsSto = getVal("loraseek_single", "sto_acc");
+  const lsPay = getVal("loraseek_single", "payload_acc");
+
+  $("kpi-base-title").textContent = `Conventional ${snrTag}`;
+  $("kpi-base-val").innerHTML = `CFO ${fmtPct(convCfo)} · STO ${fmtPct(convSto)}`;
+  $("kpi-base-sub").textContent = `Downstream Payload Acc: ${fmtPct(convPay)}`;
+
+  $("kpi-single-title").textContent = `GLoRiPHY Denoised ${snrTag}`;
+  $("kpi-single-val").innerHTML = `CFO ${fmtPct(glCfo)}${fmtGain(glCfo, convCfo)}`;
+  $("kpi-single-sub").innerHTML = `STO ${fmtPct(glSto)} (${fmtSignedDiff(glSto, convSto)}) · Payload: ${fmtPct(glPay)}`;
+
+  $("kpi-multi-title").textContent = `LoRaSeek Denoised ${snrTag}`;
+  $("kpi-multi-val").innerHTML = `CFO ${fmtPct(lsCfo)}${fmtGain(lsCfo, convCfo)}`;
+  $("kpi-multi-sub").innerHTML = `STO ${fmtPct(lsSto)} (${fmtSignedDiff(lsSto, convSto)}) · Payload: ${fmtPct(lsPay)}`;
+
+  // Update all 5 Chart.js graphs
+  updateSyncExperimentCharts(syncExpCharts, data);
+
+  // Render numerical breakdown table
+  renderSyncTable(data);
+}
+
+function renderSyncTable(data) {
+  if (!data) return;
+  const metric = $("sync-table-metric")?.value || "cfo_acc";
+  const series = data.series || {};
+  const meta = data.methods_meta || {};
+  const snrs = data.snr_list || [];
+  const allowedOrder = ["conv_single", "gloriphy_single", "loraseek_single"];
+  const order = allowedOrder.filter((m) => series[m]);
+  const fallbackColor = {
+    conv_single: "#334155",
+    gloriphy_single: "#e11d48",
+    loraseek_single: "#2563eb",
+  };
+  const fallbackShort = {
+    conv_single: "Conventional",
+    gloriphy_single: "GLoRiPHY Denoised",
+    loraseek_single: "LoRaSeek Denoised",
+  };
+
+  const lowerIsBetter = (metric === "cfo_mae" || metric === "sto_mae" || metric === "avg_ms");
+  const unit =
+    metric === "cfo_mae" ? " Hz"
+    : metric === "sto_mae" ? " samp"
+    : metric === "avg_ms" ? " ms"
+    : "%";
+
+  const thead = $("sync-table-head");
+  const tbody = $("sync-table-body");
+  if (!thead || !tbody) return;
+
+  thead.innerHTML = `<tr>
+    <th>SNR (dB)</th>
+    ${order
+      .map((m) => {
+        const color = fallbackColor[m] || meta[m]?.color || "#475569";
+        const label = fallbackShort[m] || meta[m]?.short || m;
+        return `<th><span class="sync-method-dot" style="background:${color}"></span>${label}</th>`;
+      })
+      .join("")}
+  </tr>`;
+
+  const rowsHtml = snrs.map((snr, idx) => {
+    const vals = order.map((m) => series[m]?.[metric]?.[idx]);
+    const numericVals = vals.filter((v) => typeof v === "number" && !Number.isNaN(v));
+    const bestVal = numericVals.length
+      ? (lowerIsBetter ? Math.min(...numericVals) : Math.max(...numericVals))
+      : null;
+
+    const cells = vals
+      .map((v) => {
+        if (v === undefined || v === null) return `<td>—</td>`;
+        const isBest = bestVal !== null && Math.abs(v - bestVal) < 1e-6;
+        const formatted = (metric === "cfo_mae" && v >= 100) ? v.toFixed(0) : v.toFixed(1);
+        return `<td class="${isBest ? "sync-best-cell" : ""}">${formatted}${unit}</td>`;
+      })
+      .join("");
+
+    return `<tr><td>${snr} dB</td>${cells}</tr>`;
+  });
+
+  tbody.innerHTML = rowsHtml.join("");
+}
+
+function setupSyncExperimentControls() {
+  document.querySelectorAll(".sync-preset-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const sf = Number(btn.dataset.sf);
+      selectSavedSyncSf(sf);
+    });
+  });
+
+  document.querySelectorAll(".sync-export-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const chartKey = btn.dataset.chart;
+      const sf = syncCurrentData?.sf || 7;
+      if (syncExpCharts && chartKey) {
+        exportSyncChartPng(syncExpCharts, chartKey, sf);
+      }
+    });
+  });
+
+  $("sync-table-metric")?.addEventListener("change", () => {
+    if (syncCurrentData) renderSyncTable(syncCurrentData);
+  });
+
+  $("sync-sf")?.addEventListener("change", (e) => {
+    const sf = Number(e.target.value);
+    if (sf === 8) {
+      $("sync-snr-min").value = -26;
+      $("sync-snr-max").value = -12;
+    } else {
+      $("sync-snr-min").value = -24;
+      $("sync-snr-max").value = -10;
+    }
+  });
+
+  $("sync-exp-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("sync-run-btn");
+    const errEl = $("sync-error");
+    errEl.hidden = true;
+    btn.disabled = true;
+    btn.textContent = "Running Sync Experiment...";
+
+    const rawSeed = $("sync-seed").value.trim();
+    const parsedSeed = rawSeed === "" ? -1 : Number(rawSeed);
+
+    const shouldSave = Boolean($("sync-save-preset")?.checked);
+
+    const payload = {
+      sf: Number($("sync-sf").value) || 7,
+      snr_min: Number($("sync-snr-min").value),
+      snr_max: Number($("sync-snr-max").value),
+      snr_step: Number($("sync-snr-step").value) || 2,
+      n_trials: Number($("sync-n-trials").value) || 40,
+      cfo_lo: Number($("sync-cfo-lo").value),
+      cfo_hi: Number($("sync-cfo-hi").value),
+      sto_lo: Number($("sync-sto-lo").value),
+      sto_hi: Number($("sync-sto-hi").value),
+      seed: Number.isNaN(parsedSeed) ? -1 : parsedSeed,
+      save: shouldSave,
+    };
+
+    try {
+      const res = await api.runSyncExperiment(payload);
+      if (shouldSave) {
+        syncSavedResults[`sf${res.sf}`] = res;
+        selectSavedSyncSf(res.sf);
+      } else {
+        syncCurrentData = res;
+        document.querySelectorAll(".sync-preset-btn").forEach((b) => b.classList.remove("active"));
+        renderSyncExperiment(res);
+        if ($("sync-saved-meta")) {
+          $("sync-saved-meta").textContent = `Showing live custom SF${res.sf} sweep (${res.n_trials} trials/SNR, ${res.elapsed_sec}s). Click SF7/SF8 above to return to saved N=100 presets.`;
+        }
+      }
+    } catch (err) {
+      errEl.textContent = err.message || "Failed to run denoised synchronization experiment.";
+      errEl.hidden = false;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Run Live Sync Experiment";
+    }
+  });
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────────────
 (async function init() {
   wireTouchTracking();
   setupNavigation();
+  setupSweepExportControls();
   setupSingleFrameControls();
+  setupSyncExperimentControls();
   applyMethodDefaults($("preamble_detection_method").value); // matches the <select>'s own default
   updatePacketsPerBinHint();
   await loadCapabilities().catch((e) => console.error("capabilities failed", e));

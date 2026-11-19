@@ -61,6 +61,7 @@ This repository implements centralized multi-gateway diversity combining, carrie
    - Built with Flask, vanilla ES6 JavaScript, and Chart.js.
    - **Page 1 (Full-Pipeline Sweep)**: Monte Carlo simulations sweeping SNR, CFO, and STO ranges across hundreds of packets with live streaming progress, MAE curves, and detection statistics.
    - **Page 2 (Single-Frame Symbol Benchmark)**: Side-by-side benchmark of all 7 demodulation methods on synthetic or impaired LoRa frames with millisecond-precision execution timing and accuracy badges.
+   - **Page 3 (Denoised Sync Experiment)**: Ultra-low SNR up/down-chirp synchronization comparison pitting pure conventional dechirping against neural-denoised synchronization (**GLoRiPHY** & **LoRaSeek** with complex-conjugate down-chirp symmetry) across CFO accuracy/MAE, STO accuracy/MAE, and downstream compensated payload accuracy.
 
 ---
 
@@ -88,6 +89,8 @@ CRAN-implementation/
 │   │   ├── routes.py               # Flask REST API and page routing
 │   │   ├── orchestrator.py         # Monte Carlo experiment runner
 │   │   ├── symbol_benchmark.py     # Single-frame multi-model benchmark engine
+│   │   ├── sync_experiment.py      # Denoised up/down-chirp sync experiment engine
+│   │   ├── sync_experiment_results.json  # Precomputed SF7 & SF8 N=100 sync results
 │   │   ├── persistence.py          # Run metadata and history manager
 │   │   ├── static/                 # CSS stylesheets and Chart.js frontend
 │   │   └── templates/index.html    # Unified dashboard web interface
@@ -96,7 +99,7 @@ CRAN-implementation/
 │   │   ├── calora/                 # CALoRa preamble & chirp restorer
 │   │   ├── loraseek/               # LoRaSeek STFT transformer (SF7, SF8)
 │   │   ├── nelora/                 # NeLoRa maskCNN + classifier (SF7, SF8)
-│   │   ├── gloriphy/               # GLoRiPHY conformer denoiser (SF8, SF9)
+│   │   ├── gloriphy/               # GLoRiPHY conformer denoiser (SF7, SF8, SF9)
 │   │   └── README.md               # Detailed neural model catalog
 │   │
 │   ├── notebooks/                  # Analysis and evaluation notebooks
@@ -194,6 +197,13 @@ Start the dashboard using `python run_dashboard.py` and open `http://localhost:5
   - Accuracy (%) and matched symbol count.
   - Execution time per frame in milliseconds ($\text{ms}$).
   - Decoded symbol vectors and diagnostic notes.
+
+### Page 3: Denoised Sync Experiment
+- Evaluates **up-chirp / down-chirp CFO & STO synchronization** in the ultra-low SNR regime ($-26\text{ dB}$ to $-10\text{ dB}$).
+- Compares 3 single-pair (`1 Up + 1 Down`) synchronization pipelines side-by-side:
+  - **Conventional (`1 Up + 1 Down`)** baseline matching `helper_function.py::detect_cfo_sto`.
+  - **GLoRiPHY-Denoised (`1 Up + 1 Down`)** and **LoRaSeek-Denoised (`1 Up + 1 Down`)**, using complex-conjugate symmetry (`conj(D(conj(down)))`) so up-chirp-trained neural denoisers restore SFD down-chirps with zero retraining.
+- Includes precomputed high-precision `N=100` trials/SNR sweeps for **SF7** and **SF8**, 5 interactive Chart.js plots (CFO Accuracy, STO Accuracy, CFO MAE log scale, STO MAE log scale, and Downstream Compensated Payload Accuracy), a metric-selectable numerical table, and a live custom sweep form.
 
 ---
 

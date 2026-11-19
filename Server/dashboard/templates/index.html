@@ -21,6 +21,9 @@
   <button type="button" class="nav-tab" id="tab-single-frame" data-target="page-single-frame">
     <span class="nav-icon">🔬</span> Single-Frame Symbol Benchmark
   </button>
+  <button type="button" class="nav-tab" id="tab-sync-exp" data-target="page-sync-exp">
+    <span class="nav-icon">🔄</span> Denoised Sync Experiment
+  </button>
 </nav>
 
 <div id="page-sweep" class="page-container">
@@ -154,14 +157,29 @@
 
     <div id="warning-banner" class="warning-banner" hidden></div>
 
-    <div class="chart-grid">
-      <div class="chart-card"><h3>Preamble Detection Rate</h3><canvas id="chart-preamble"></canvas></div>
-      <div class="chart-card"><h3>CFO Success Rate</h3><canvas id="chart-cfo"></canvas></div>
-      <div class="chart-card"><h3>STO Success Rate</h3><canvas id="chart-sto"></canvas></div>
-      <div class="chart-card"><h3>Symbol Decoding Accuracy</h3><canvas id="chart-symbol"></canvas></div>
+    <!-- Journal-Grade HD PNG Export & Layout Toolbar (kept outside figure boxes for clean screenshots) -->
+    <div class="sync-export-bar">
+      <span class="sync-export-label">Export Publication Figures (HD PNG):</span>
+      <button type="button" class="sync-export-btn sweep-export-btn" data-chart="preamble">↓ Preamble</button>
+      <button type="button" class="sync-export-btn sweep-export-btn" data-chart="cfo">↓ CFO</button>
+      <button type="button" class="sync-export-btn sweep-export-btn" data-chart="sto">↓ STO</button>
+      <button type="button" class="sync-export-btn sweep-export-btn" data-chart="symbol">↓ Symbol Acc</button>
+      <button type="button" class="sync-export-btn sweep-export-btn" data-chart="nbin">↓ Packets/Bin</button>
+      <span class="sync-export-spacer"></span>
+      <span class="sync-export-label">Figure Width:</span>
+      <div class="scope-toggle" role="group" aria-label="Sweep chart layout">
+        <button type="button" class="sweep-layout-btn active" data-layout="2col">2-Col</button>
+        <button type="button" class="sweep-layout-btn" data-layout="1col">1-Col Wide</button>
+      </div>
     </div>
-    <div class="chart-card chart-card-wide">
-      <h3>Packets per SNR bin</h3>
+
+    <div class="sync-journal-grid" id="sweep-chart-grid">
+      <div class="sync-journal-card sweep-card"><canvas id="chart-preamble"></canvas></div>
+      <div class="sync-journal-card sweep-card"><canvas id="chart-cfo"></canvas></div>
+      <div class="sync-journal-card sweep-card"><canvas id="chart-sto"></canvas></div>
+      <div class="sync-journal-card sweep-card"><canvas id="chart-symbol"></canvas></div>
+    </div>
+    <div class="sync-journal-card sweep-nbin-card" style="margin-top: 14px;">
       <canvas id="chart-nbin"></canvas>
     </div>
 
@@ -195,10 +213,26 @@
 </div>
 
 <section class="history-section">
-  <h2>Past Runs</h2>
+  <div class="history-header">
+    <h2>Past Runs</h2>
+    <div class="history-header-controls">
+      <span class="hint" style="margin:0;">Semantic defaults: Conv Clean = Slate, Conv CFO&amp;TO = Rose, CALoRa Clean = Blue, CALoRa CFO&amp;TO = Green. Click any swatch to override.</span>
+      <button type="button" id="reset-run-colors-btn" class="sync-export-btn" title="Restore semantic default colors and markers for all runs">↺ Reset Colors</button>
+    </div>
+  </div>
+  <datalist id="journal-color-presets">
+    <option value="#334155"></option>
+    <option value="#e11d48"></option>
+    <option value="#2563eb"></option>
+    <option value="#059669"></option>
+    <option value="#d97706"></option>
+    <option value="#7c3aed"></option>
+    <option value="#0891b2"></option>
+    <option value="#c026d3"></option>
+  </datalist>
   <table id="history-table">
     <thead>
-      <tr><th></th><th>Label</th><th>Started</th><th>Config</th><th>Status</th><th></th></tr>
+      <tr><th></th><th>Style</th><th>Label</th><th>Started</th><th>Config</th><th>Status</th><th></th></tr>
     </thead>
     <tbody id="history-body"></tbody>
   </table>
@@ -261,12 +295,12 @@
           <p class="hint" style="margin: 4px 0 0 20px;">Uncheck to evaluate models on raw uncompensated signal (observe CFO bin-shifts / STO errors directly).</p>
         </fieldset>
 
-        <button type="submit" id="single-run-btn" class="btn-primary" style="width: 100%;">Evaluate Models</button>
-        <div id="single-error" class="error-banner" hidden></div>
+        <button type="submit" id="single-run-btn" style="width: 100%;">Evaluate Models</button>
+        <div id="single-error" class="form-error" hidden></div>
       </form>
     </aside>
 
-    <main class="main-content">
+    <main class="main-area">
       <div id="single-results-placeholder" class="placeholder-card">
         <p style="font-size: 15px; font-weight: 600; margin-bottom: 6px;">Single-Frame Symbol Decoding Benchmark</p>
         <p>Evaluates symbol decoding methods side-by-side on a single LoRa frame:</p>
@@ -312,13 +346,17 @@
           </div>
         </div>
 
-        <div class="chart-grid" style="margin-top: 12px;">
-          <div class="chart-card">
-            <h3>Symbol Accuracy Rate (%)</h3>
+        <div class="sync-export-bar" style="margin-top: 14px;">
+          <span class="sync-export-label">Export Publication Figures (HD PNG):</span>
+          <button type="button" class="sync-export-btn single-export-btn" data-chart="acc">↓ Accuracy Bar</button>
+          <button type="button" class="sync-export-btn single-export-btn" data-chart="latency">↓ Latency Bar</button>
+        </div>
+
+        <div class="sync-journal-grid">
+          <div class="sync-journal-card">
             <canvas id="chart-single-acc"></canvas>
           </div>
-          <div class="chart-card">
-            <h3>Execution Latency (ms)</h3>
+          <div class="sync-journal-card">
             <canvas id="chart-single-latency"></canvas>
           </div>
         </div>
@@ -420,6 +458,184 @@
             <div class="reference-details">
               <span class="ref-venue">IEEE &bull; <a href="https://ieeexplore.ieee.org/document/11386915" target="_blank" rel="noopener noreferrer">https://ieeexplore.ieee.org/document/11386915</a></span>
               <p class="ref-desc">Preamble detection &amp; restoration method: <em>CALoRa</em>. Uses chirp-aware self-attention and deep neural networks for robust preamble location under severe CFO/STO offsets and reconstructs damaged time-domain chirp waveforms prior to decoding.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PAGE 3: DENOISED UP/DOWN-CHIRP SYNCHRONIZATION EXPERIMENT (CFO & STO)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="page-sync-exp" class="page-container" hidden>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <fieldset>
+        <legend>Precomputed Results</legend>
+        <p class="hint" style="margin-top:0;">Switch between saved high-precision Monte Carlo sweeps (N=100 trials/SNR):</p>
+        <div class="sync-preset-row">
+          <button type="button" class="sync-preset-btn active" id="sync-view-sf7" data-sf="7">SF7 Results</button>
+          <button type="button" class="sync-preset-btn" id="sync-view-sf8" data-sf="8">SF8 Results</button>
+        </div>
+        <p id="sync-saved-meta" class="hint" style="margin:0;"></p>
+      </fieldset>
+
+      <form id="sync-exp-form">
+        <fieldset>
+          <legend>Run Custom Sync Sweep</legend>
+          <label>Spreading Factor
+            <select id="sync-sf">
+              <option value="7" selected>SF7 (GLoRiPHY + LoRaSeek)</option>
+              <option value="8">SF8 (GLoRiPHY + LoRaSeek)</option>
+            </select>
+          </label>
+          <div class="range-row">
+            <span class="range-label">SNR range (dB)</span>
+            <input type="number" id="sync-snr-min" value="-24" required>
+            <input type="number" id="sync-snr-max" value="-10" required>
+          </div>
+          <label>SNR Step (dB)
+            <input type="number" id="sync-snr-step" value="2" min="1" max="6" required>
+          </label>
+          <label>Trials per SNR <span class="hint-inline">(5–500)</span>
+            <input type="number" id="sync-n-trials" value="40" min="5" max="500" required>
+          </label>
+          <div class="range-row">
+            <span class="range-label">CFO range (Hz)</span>
+            <input type="number" id="sync-cfo-lo" value="-4358" required>
+            <input type="number" id="sync-cfo-hi" value="4584" required>
+          </div>
+          <div class="range-row">
+            <span class="range-label">STO range (samp)</span>
+            <input type="number" id="sync-sto-lo" value="0" required>
+            <input type="number" id="sync-sto-hi" value="50" required>
+          </div>
+          <label>Seed <span class="hint-inline">(-1 = random)</span>
+            <input type="number" id="sync-seed" value="2026">
+          </label>
+          <label class="checkbox" style="margin-top: 10px;">
+            <input type="checkbox" id="sync-save-preset"> Save &amp; overwrite preset on disk
+          </label>
+        </fieldset>
+
+        <button type="submit" id="sync-run-btn" style="width: 100%;">Run Live Sync Experiment</button>
+        <div id="sync-error" class="form-error" hidden></div>
+      </form>
+    </aside>
+
+    <main class="main-area">
+      <div class="result-summary-bar" style="margin-bottom: 14px;">
+        <span class="summary-chip accent" id="sync-chip-sf">SF7</span>
+        <span class="summary-chip" id="sync-chip-trials">N=100 trials/SNR</span>
+        <span class="summary-chip" id="sync-chip-cfo">CFO: [-4358, 4584] Hz</span>
+        <span class="summary-chip" id="sync-chip-sto">STO: [0, 50] samp</span>
+        <span class="summary-chip" id="sync-chip-tol">Tol: &plusmn;488.3 Hz / &plusmn;8 samp</span>
+      </div>
+
+      <!-- KPI Highlight Cards at Reference Ultra-Low SNR -->
+      <div class="sync-kpi-grid" id="sync-kpi-grid">
+        <div class="sync-kpi-card highlight-base">
+          <div class="sync-kpi-title" id="kpi-base-title">Conventional @ -18 dB</div>
+          <div class="sync-kpi-value" id="kpi-base-val">—</div>
+          <div class="sync-kpi-sub" id="kpi-base-sub">Loading precomputed results...</div>
+        </div>
+        <div class="sync-kpi-card highlight-gl">
+          <div class="sync-kpi-title" id="kpi-single-title">GLoRiPHY Denoised</div>
+          <div class="sync-kpi-value" id="kpi-single-val">—</div>
+          <div class="sync-kpi-sub" id="kpi-single-sub">—</div>
+        </div>
+        <div class="sync-kpi-card highlight-ls">
+          <div class="sync-kpi-title" id="kpi-multi-title">LoRaSeek Denoised</div>
+          <div class="sync-kpi-value" id="kpi-multi-val">—</div>
+          <div class="sync-kpi-sub" id="kpi-multi-sub">—</div>
+        </div>
+      </div>
+
+      <!-- Journal-Grade HD PNG Export Toolbar (kept outside figure cards for clean screenshots) -->
+      <div class="sync-export-bar">
+        <span class="sync-export-label">Export Publication Figures (HD PNG):</span>
+        <button type="button" class="sync-export-btn" data-chart="cfoAcc">↓ CFO Acc</button>
+        <button type="button" class="sync-export-btn" data-chart="stoAcc">↓ STO Acc</button>
+        <button type="button" class="sync-export-btn" data-chart="cfoMae">↓ CFO MAE</button>
+        <button type="button" class="sync-export-btn" data-chart="stoMae">↓ STO MAE</button>
+        <button type="button" class="sync-export-btn" data-chart="payloadAcc">↓ Payload Acc</button>
+      </div>
+
+      <!-- 2x2 Journal-Grade Synchronization Comparison Figures -->
+      <div class="sync-journal-grid">
+        <div class="sync-journal-card">
+          <canvas id="chart-sync-cfo-acc"></canvas>
+        </div>
+        <div class="sync-journal-card">
+          <canvas id="chart-sync-sto-acc"></canvas>
+        </div>
+        <div class="sync-journal-card">
+          <canvas id="chart-sync-cfo-mae"></canvas>
+        </div>
+        <div class="sync-journal-card">
+          <canvas id="chart-sync-sto-mae"></canvas>
+        </div>
+      </div>
+
+      <!-- Downstream End-to-End Payload Accuracy Figure -->
+      <div class="sync-journal-card sync-journal-card-wide" style="margin-top: 14px;">
+        <canvas id="chart-sync-payload-acc"></canvas>
+      </div>
+      <p class="hint" style="margin: 6px 2px 0;">
+        * Downstream Payload Accuracy: each method's estimated (CFO, STO) compensates the raw packet before decoding 10 payload symbols with identical polyphase FFT demodulation.
+      </p>
+
+      <!-- Numerical Results Table -->
+      <div class="chart-card" style="margin-top: 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+          <h3 style="margin:0; font-size:14px;">Detailed Per-SNR Numerical Breakdown</h3>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; margin:0;">
+            Metric:
+            <select id="sync-table-metric" style="width:auto; padding:4px 8px;">
+              <option value="cfo_acc" selected>CFO Accuracy (%)</option>
+              <option value="sto_acc">STO Accuracy (%)</option>
+              <option value="cfo_mae">CFO MAE (Hz)</option>
+              <option value="sto_mae">STO MAE (samples)</option>
+              <option value="payload_acc">Compensated Payload Accuracy (%)</option>
+              <option value="avg_ms">Avg Sync Latency (ms / packet)</option>
+            </select>
+          </label>
+        </div>
+        <div class="sync-table-wrap">
+          <table>
+            <thead id="sync-table-head"></thead>
+            <tbody id="sync-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Technical Methodology & Physics Findings Card -->
+      <div class="reference-card" style="margin-top: 16px;">
+        <div class="reference-card-header">
+          <svg class="reference-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <h3>Methodology &amp; Key Physics Findings</h3>
+        </div>
+        <div class="reference-item" style="margin-bottom: 8px;">
+          <div class="reference-badge">1</div>
+          <div class="reference-content">
+            <div class="reference-title">Complex-Conjugate Symmetry for Down-Chirp Denoising</div>
+            <div class="reference-details">
+              Both GLoRiPHY and LoRaSeek are trained exclusively on LoRa <strong>up-chirps</strong>. Passing a noisy SFD <strong>down-chirp</strong> directly fails because its spectrogram slope is inverted. Taking the complex conjugate <code>conj(r_down(t))</code> transforms the down-chirp into an exact up-chirp (preserving timing offset &Delta;&tau; and negating frequency offset &minus;&Delta;f); denoising <code>conj(r_down(t))</code> and conjugating back <code>conj(D(conj(r_down)))</code> recovers a clean down-chirp with exact +&Delta;f and &Delta;&tau; without retraining.
+            </div>
+          </div>
+        </div>
+        <div class="reference-item">
+          <div class="reference-badge">2</div>
+          <div class="reference-content">
+            <div class="reference-title">Carrier Phase Preservation &amp; Fractional CFO</div>
+            <div class="reference-details">
+              GLoRiPHY strips global symbol phase to <code>0 rad</code> (trained with random input phase against zero-phase targets), whereas LoRaSeek preserves inter-symbol phase. At ultra-low SNR (&le; &minus;18 dB), computing <code>CFO_frac</code> coherently on raw preamble pairs and applying neural denoising to the single up-chirp + conjugated down-chirp pair yields the highest stability and up to +28&ndash;38% CFO/STO accuracy gains over pure conventional synchronization.
             </div>
           </div>
         </div>
