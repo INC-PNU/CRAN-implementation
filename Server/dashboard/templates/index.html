@@ -81,6 +81,14 @@
           <select id="calora_checkpoint"></select>
         </label>
 
+        <label>Synchronization (CFO &amp; STO)
+          <select id="sync_denoiser">
+            <option value="none" selected>Normal (conventional FFT)</option>
+            <option value="loraseek" id="sync-loraseek-option">Denoise first — LoRaSeek + FFT</option>
+            <option value="gloriphy" id="sync-gloriphy-option">Denoise first — GLoRiPHY + FFT</option>
+          </select>
+        </label>
+
         <label>Symbol decoding
           <select id="symbol_decoding_method">
             <option value="conventional">Conventional (dechirp)</option>

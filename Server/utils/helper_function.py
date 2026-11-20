@@ -183,7 +183,7 @@ def save_iq_to_disk(np_lora_signal: np.ndarray, dir: str) -> str:
 def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint_symbol=None,
                    precorrect_cfo_frac=None,use_fractional_sto=None,verify_network_id=None,
                    sync_payload_offset_adjust=None,sto_method=None,
-                   downchirp_search_radius=1, return_details=False):
+                   downchirp_search_radius=1, sync_denoiser="none", return_details=False):
     """
     preamble_hint_symbol: optional externally-supplied symbol-frame index (e.g. from a
     neural preamble detector such as CALoRa) marking where the preamble begins. When
@@ -250,6 +250,9 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         sync_payload_offset_adjust = not has_hint
     if sto_method is None:
         sto_method = "v3"
+    use_sync_denoiser = (sync_denoiser not in (None, "", "none"))
+    if use_sync_denoiser:
+        from utils.sync_denoiser import denoise_upchirp_waveforms, denoise_downchirp_waveforms
 
     THRESHOLD_FOR_PREAMBLE_DETECTION = 0.625
     factor = 1.4
@@ -285,13 +288,27 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         # (strong), which is a real difference rather than a coin flip.
         preamble_found = True
         preamble_found_index = max(0, int(downchirp_hint_symbol) - opts.no_of_preamble - 2)
-        candidates = []
+        cand_indices = []
+        cand_frames = []
         for cand in range(max(0, int(downchirp_hint_symbol) - downchirp_search_radius),
                           int(downchirp_hint_symbol) + downchirp_search_radius + 1):
             frameBuffer = rx_samples[cand*framePerSymbol:(cand+1)*framePerSymbol]
             if len(frameBuffer) != framePerSymbol:
                 continue
-            candidates.append((cand, np.max(np.abs(np.fft.fft(frameBuffer * up_chirp_signal)))))
+            cand_indices.append(cand)
+            cand_frames.append(frameBuffer)
+        if cand_frames:
+            frames_arr = np.stack(cand_frames, axis=0)
+            if use_sync_denoiser:
+                # Complex-conjugate down-chirp denoising boosts real SFD down-chirps
+                # while suppressing adjacent sync-word up-chirps and AWGN noise spikes.
+                frames_arr = denoise_downchirp_waveforms(frames_arr, method=sync_denoiser, sf=opts.sf)
+            candidates = [
+                (cand_indices[k], float(np.max(np.abs(np.fft.fft(frames_arr[k] * up_chirp_signal)))))
+                for k in range(len(cand_indices))
+            ]
+        else:
+            candidates = []
         if len(candidates) >= 2:
             pair_scores = [candidates[k][1] + candidates[k + 1][1]
                            for k in range(len(candidates) - 1)]
@@ -394,6 +411,17 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         #VERSI 1.1 (see above) off — matches the no-hint path's original behavior by default.
         up_frame = rx_samples[(fup_chosen)*framePerSymbol:(fup_chosen)*framePerSymbol + framePerSymbol]
         down_frame = rx_samples[(fdown_chosen)*framePerSymbol:(fdown_chosen)*framePerSymbol + framePerSymbol]
+
+    if use_sync_denoiser and len(up_frame) == framePerSymbol and len(down_frame) == framePerSymbol:
+        # Stage 2 Neural Denoising before up/down dechirp FFT:
+        # Batch [up_frame, conj(down_frame)] in one forward pass, then conjugate down_frame back.
+        pair_den = denoise_upchirp_waveforms(
+            np.stack([up_frame, np.conj(down_frame)], axis=0),
+            method=sync_denoiser,
+            sf=opts.sf,
+        )
+        up_frame = pair_den[0]
+        down_frame = np.conj(pair_den[1])
 
     dechirped_up = up_frame * down_chirp_signal      #VERSI 1.2
     dechirped_down = down_frame * up_chirp_signal    #VERSI 1.2
@@ -544,6 +572,8 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         ################### MODUL STO V1 Better so far ###################################
         rx_samples_corrected_cfo =  rx_samples[(fup_chosen-1)*framePerSymbol:(fup_chosen-1)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_total
         rx_samples_corrected_cfo =  rx_samples[(fup_chosen-2)*framePerSymbol:(fup_chosen-2)*framePerSymbol + framePerSymbol] * correction_factor_by_cfo_total
+        if use_sync_denoiser and len(rx_samples_corrected_cfo) == framePerSymbol:
+            rx_samples_corrected_cfo = denoise_upchirp_waveforms(rx_samples_corrected_cfo, method=sync_denoiser, sf=opts.sf)
         corr = correlate(rx_samples_corrected_cfo, up_chirp_signal, mode="full", method="fft")
         peak_index = np.argmax(np.abs(corr))
         lag_samples = peak_index - (samplePerSymbol - 1)  # 0 means perfectly aligned
@@ -574,6 +604,13 @@ def detect_cfo_sto(opts,LoRa,rx_samples,preamble_hint_symbol=None,downchirp_hint
         sync_frame_2 = rx_samples[start_2:start_2 + framePerSymbol] * correction_factor_by_cfo_total
         if len(sync_frame_1) != framePerSymbol or len(sync_frame_2) != framePerSymbol:
             return (-2, None, None, preamble_found, None) if return_details else (-2, None, None, preamble_found)
+        if use_sync_denoiser:
+            sync_den = denoise_upchirp_waveforms(
+                np.stack([sync_frame_1, sync_frame_2], axis=0),
+                method=sync_denoiser,
+                sf=opts.sf,
+            )
+            sync_frame_1, sync_frame_2 = sync_den[0], sync_den[1]
         symbol_sync_1, _ = estimate_symbol(opts, LoRa, sync_frame_1)
         symbol_sync_2, _ = estimate_symbol(opts, LoRa, sync_frame_2)
 

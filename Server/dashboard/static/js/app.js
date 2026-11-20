@@ -115,6 +115,15 @@ async function loadCapabilities() {
       : "LoRaSeek (neural) — checkpoint unavailable";
   }
 
+  const syncLsOpt = $("sync-loraseek-option");
+  if (syncLsOpt) {
+    syncLsOpt.disabled = !capabilities.loraseek_available;
+  }
+  const syncGlOpt = $("sync-gloriphy-option");
+  if (syncGlOpt) {
+    syncGlOpt.disabled = !capabilities.gloriphy_available;
+  }
+
   const initialSf = Number($("sf").value) || 7;
   updateNeloraCheckpointsForSf(initialSf);
   updateGloriphyCheckpointsForSf(initialSf);
@@ -246,6 +255,24 @@ function syncSfCompatibility(sf) {
       $("gloriphy-checkpoint-row").hidden = true;
     }
   }
+
+  const syncSel = $("sync_denoiser");
+  const syncLsOpt = $("sync-loraseek-option");
+  if (syncLsOpt && capabilities?.loraseek_available) {
+    const lsMatch = (capabilities?.loraseek_checkpoints || []).some((ck) => ck.sf === sf);
+    syncLsOpt.disabled = !lsMatch;
+    if (!lsMatch && syncSel && syncSel.value === "loraseek") {
+      syncSel.value = "none";
+    }
+  }
+  const syncGlOpt = $("sync-gloriphy-option");
+  if (syncGlOpt && capabilities?.gloriphy_available) {
+    const glMatch = (capabilities?.gloriphy_checkpoints || []).some((ck) => ck.sf === sf);
+    syncGlOpt.disabled = !glMatch;
+    if (!glMatch && syncSel && syncSel.value === "gloriphy") {
+      syncSel.value = "none";
+    }
+  }
 }
 
 $("preamble_detection_method").addEventListener("change", (e) => {
@@ -289,6 +316,7 @@ function collectConfig() {
     server: {
       preamble_detection_method: method,
       calora_checkpoint: method === "calora" ? $("calora_checkpoint").value : null,
+      sync_denoiser: $("sync_denoiser")?.value || "none",
       symbol_decoding_method: $("symbol_decoding_method").value,
       nelora_checkpoint: $("symbol_decoding_method").value === "nelora" ? $("nelora_checkpoint")?.value : null,
       loraseek_checkpoint: $("symbol_decoding_method").value === "loraseek" ? $("loraseek_checkpoint").value : null,
@@ -329,6 +357,7 @@ function fillFormFromConfig(clientConfig, serverConfig) {
   $("preamble_detection_method").value = serverConfig.preamble_detection_method;
   $("calora-checkpoint-row").hidden = serverConfig.preamble_detection_method !== "calora";
   if (serverConfig.calora_checkpoint) $("calora_checkpoint").value = serverConfig.calora_checkpoint;
+  if ($("sync_denoiser")) $("sync_denoiser").value = serverConfig.sync_denoiser || "none";
   $("symbol_decoding_method").value = serverConfig.symbol_decoding_method;
   $("nelora-checkpoint-row").hidden = serverConfig.symbol_decoding_method !== "nelora";
   $("loraseek-checkpoint-row").hidden = serverConfig.symbol_decoding_method !== "loraseek";
@@ -459,6 +488,9 @@ function configSummary(clientConfig, serverConfig) {
   const method = serverConfig.preamble_detection_method === "calora"
     ? `CALoRa (${(serverConfig.calora_checkpoint || "?").replace(".pth", "")})`
     : "Conventional";
+  const syncDen = serverConfig.sync_denoiser || "none";
+  const syncStr = syncDen === "loraseek" ? " + LoRaSeek Sync"
+    : syncDen === "gloriphy" ? " + GLoRiPHY Sync" : "";
   let demod = "conv demod";
   if (serverConfig.symbol_decoding_method === "nelora") {
     const ckpt = serverConfig.nelora_checkpoint ? ` (${serverConfig.nelora_checkpoint})` : "";
@@ -479,7 +511,7 @@ function configSummary(clientConfig, serverConfig) {
   const snrStr = Array.isArray(clientConfig.snr_db_range) && clientConfig.snr_db_range.length >= 2
     ? ` · SNR ${clientConfig.snr_db_range[0]}..${clientConfig.snr_db_range[1]}`
     : "";
-  return `${method} [${dataTag}] + ${demod} · ${corr} · SF${clientConfig.sf ?? 7}${bwStr}${fsStr}${snrStr}`;
+  return `${method}${syncStr} [${dataTag}] + ${demod} · ${corr} · SF${clientConfig.sf ?? 7}${bwStr}${fsStr}${snrStr}`;
 }
 
 async function refreshHistory() {
@@ -630,6 +662,10 @@ function formatSweepLegendLabel(meta, fallbackId) {
     ? "CALoRa Preamble detection"
     : "Conventional Preamble detection";
 
+  const syncDen = srv.sync_denoiser || "none";
+  const syncPart = syncDen === "loraseek" ? " + LoRaSeek Sync"
+    : syncDen === "gloriphy" ? " + GLoRiPHY Sync" : "";
+
   const demodMap = {
     nelora: "NeLoRa demod",
     loraseek: "LoRaSeek demod",
@@ -650,7 +686,7 @@ function formatSweepLegendLabel(meta, fallbackId) {
   const bwStr = `${bw / 1000}kHz`;
   const fsStr = fs >= 1000000 ? `${fs / 1000000}MHz` : `${fs / 1000}kHz`;
 
-  return `[${dataTag}]; ${preMethod} + ${demodLabel}, ${corrLabel}, SF${sf} ${bwStr} @${fsStr}`;
+  return `[${dataTag}]; ${preMethod}${syncPart} + ${demodLabel}, ${corrLabel}, SF${sf} ${bwStr} @${fsStr}`;
 }
 
 // ── Chart + diagnostics + warning-banner rendering ──────────────────────────────────

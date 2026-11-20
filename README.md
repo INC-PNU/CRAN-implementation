@@ -185,8 +185,9 @@ Start the dashboard using `python run_dashboard.py` and open `http://localhost:5
 
 ### Page 1: Full-Pipeline Monte Carlo Sweep
 - Configure client parameters: Bandwidth, Sample Rate, Number of Packets, CFO range ($\pm\text{Hz}$), STO range (samples), and SNR range ($\text{dB}$).
-- Select preamble detection method (**Conventional** vs. **CALoRa**).
-- Select symbol decoding method (**Conventional**, **NeLoRa**, **LoRaSeek**, or **GLoRiPHY**) and choose specific checkpoint iterations.
+- Select Stage 1 preamble detection method (**Conventional** vs. **CALoRa**).
+- Select Stage 2 synchronization mode (**Normal conventional FFT**, **Denoise first — LoRaSeek + FFT**, or **Denoise first — GLoRiPHY + FFT**) to evaluate denoised CFO & STO estimation end-to-end.
+- Select Stage 3 symbol decoding method (**Conventional**, **NeLoRa**, **LoRaSeek**, or **GLoRiPHY**) and choose specific checkpoint iterations.
 - Toggle CFO and STO compensation dynamically.
 - Monitor real-time charts: Packet Reception Rate (PRR), Symbol Error Rate (SER), CFO Mean Absolute Error (MAE), and STO MAE across SNR bins.
 

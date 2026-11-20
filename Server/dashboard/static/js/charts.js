@@ -44,11 +44,15 @@ function saveStyleOverrides(map) {
   }
 }
 
-// Consistent semantic defaults based on Preamble Method × Channel Impairment:
-//   Conventional + Clean   -> Charcoal Slate (#334155), ●
-//   Conventional + CFO/TO  -> Crimson Rose   (#e11d48), ■
-//   CALoRa       + Clean   -> Royal Blue     (#2563eb), ▲
-//   CALoRa       + CFO/TO  -> Emerald Green  (#059669), ◆
+// Consistent semantic defaults based on Preamble Method × Sync Denoiser × Channel Impairment:
+//   Normal sync:
+//     Conventional + Clean   -> Charcoal Slate (#334155), ●
+//     Conventional + CFO/TO  -> Crimson Rose   (#e11d48), ■
+//     CALoRa       + Clean   -> Royal Blue     (#2563eb), ▲
+//     CALoRa       + CFO/TO  -> Emerald Green  (#059669), ◆
+//   Denoised sync:
+//     LoRaSeek Sync          -> Deep Violet    (#7c3aed), ▲
+//     GLoRiPHY Sync          -> Amber Gold     (#d97706), ◆
 export function semanticStyleForRun(meta) {
   const cli = meta?.client_config || {};
   const srv = meta?.server_config || {};
@@ -56,7 +60,10 @@ export function semanticStyleForRun(meta) {
   const sto = cli.sto_samp_range || [0, 0];
   const impaired = cfo[0] !== 0 || cfo[1] !== 0 || sto[0] !== 0 || sto[1] !== 0;
   const isCalora = srv.preamble_detection_method === "calora";
+  const syncDen = srv.sync_denoiser || "none";
 
+  if (syncDen === "loraseek") return { color: "#7c3aed", marker: "triangle" };
+  if (syncDen === "gloriphy") return { color: "#d97706", marker: "rectRot" };
   if (!isCalora && !impaired) return { color: "#334155", marker: "circle" };
   if (!isCalora && impaired)  return { color: "#e11d48", marker: "rect" };
   if (isCalora && !impaired)  return { color: "#2563eb", marker: "triangle" };

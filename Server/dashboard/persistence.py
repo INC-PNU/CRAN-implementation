@@ -89,6 +89,13 @@ def make_label(client_config: dict, server_config: dict) -> str:
     method = server_config.get("preamble_detection_method", "conventional")
     method_label = "CALoRa Preamble detection" if method == "calora" else "Conventional Preamble detection"
 
+    sync_denoiser = server_config.get("sync_denoiser", "none") or "none"
+    sync_map = {
+        "loraseek": " + LoRaSeek Sync",
+        "gloriphy": " + GLoRiPHY Sync",
+    }
+    sync_part = sync_map.get(sync_denoiser, "")
+
     demod = server_config.get("symbol_decoding_method", "conventional")
     demod_map = {
         "nelora": "NeLoRa demod",
@@ -127,7 +134,7 @@ def make_label(client_config: dict, server_config: dict) -> str:
     else:
         data_tag = "Data Clean"
 
-    return (f"[{data_tag}]; {method_label} + {demod_label}, {corr_label}, "
+    return (f"[{data_tag}]; {method_label}{sync_part} + {demod_label}, {corr_label}, "
             f"SF{sf} {bw_str} @{fs_str}")
 
 

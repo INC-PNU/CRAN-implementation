@@ -38,6 +38,7 @@ from utils.helper_function import detect_cfo_sto, wrap_symmetric
 from utils.my_lora_utils import (create_lora_preamble, create_lora_payload, add_cfo,
                                  calculate_symbol_alliqfile_with_down_sampling)
 from utils import nelora_inference, loraseek_inference, gloriphy_inference
+from utils.sync_denoiser import VALID_SYNC_DENOISERS, is_sync_denoiser_available
 from dashboard import calora_bridge, persistence
 
 MAX_CONCURRENT_RUNS = 3
@@ -145,6 +146,12 @@ def validate_config(client_config: dict, server_config: dict) -> None:
         ckpt = server_config.get("gloriphy_checkpoint")
         if ckpt and ckpt not in gloriphy_inference.AVAILABLE_CHECKPOINTS:
             raise ConfigError(f"unknown gloriphy_checkpoint: {ckpt!r}")
+
+    sync_denoiser = server_config.get("sync_denoiser", "none") or "none"
+    if sync_denoiser not in VALID_SYNC_DENOISERS:
+        raise ConfigError(f"unknown sync_denoiser: {sync_denoiser!r} (expected one of {VALID_SYNC_DENOISERS})")
+    if not is_sync_denoiser_available(sync_denoiser, sf=sf):
+        raise ConfigError(f"sync_denoiser={sync_denoiser!r} is not available for SF{sf}.")
 
 
 def _score_payload_symbols(demodulated, ground_truth):
@@ -256,6 +263,7 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
         "payload_start_frame": None,
     }
 
+    sync_denoiser = server_config.get("sync_denoiser", "none") or "none"
     details = None
     if server_config["preamble_detection_method"] == "calora":
         model = calora_bridge.load_calora_detector(server_config["calora_checkpoint"])
@@ -280,6 +288,7 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
             sync_payload_offset_adjust=toggles["sync_payload_offset_adjust"],
             sto_method=toggles["sto_method"],
             downchirp_search_radius=toggles["downchirp_search_radius"],
+            sync_denoiser=sync_denoiser,
             return_details=True,
         )
         if index_payload in (-1, -2) or index_payload is None:
@@ -294,6 +303,7 @@ def _run_one_packet(opts, client_config, server_config, rng, noise_seed, framePe
             verify_network_id=toggles["verify_network_id"],
             sync_payload_offset_adjust=toggles["sync_payload_offset_adjust"],
             sto_method=toggles["sto_method"],
+            sync_denoiser=sync_denoiser,
             return_details=True,
         )
         if index_payload == -1:
